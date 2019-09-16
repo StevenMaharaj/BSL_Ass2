@@ -1,0 +1,422 @@
+---
+title: 'Lab 7 solutions MAST90125: Bayesian Statistical Learning'
+header-includes:
+   - \usepackage{bm}
+   - \usepackage{amsmath}
+   - \usepackage{cite}
+output: 
+  pdf_document:
+    number_sections: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Thursday 12 September 2019**  
+
+
+## Writing Gibbs samplers in linear models.
+
+In this weeks lab, we will discuss how to write code for Gibbs sampling of linear models. 
+
+## Instructions for assignment
+
+Download \texttt{USJudgeRatings.csv} from LMS. Comment the codes below that purports to perform Gibbs sampling for a variety of linear models. See if you can determine what the code is doing. You may find referring back to lectures 12 and 13 useful. Run the code to see if it compares to the results obtained from using \texttt{stan} to fit the same models last week (Lab 6 version 2).
+
+
+\subsection{Examples of Gibbs samplers}
+
+\begin{itemize}
+\item Linear regression (flat prior for $\bm \beta$, $p(\tau) \propto \tau^{-1}$, where $\tau = (\sigma^2)^{-1}$). 
+\end{itemize}
+
+```{r}
+#This is a Gibbs sampler where beta is updated as a block. The arguments are
+#X:  matrix of predictors dimension n times p. Includes the intercept. 
+#y:  response vector, length p.
+#tau0: initial value for the residual precision. 
+#iter: number of iterations
+#burnin: number of initial iterations to remove
+Gibbs.lm1<-function(X,y,tau0,iter,burnin){
+p <- dim(X)[2]       #number of predictors
+XTX <- crossprod(X)  
+XTXinv <-solve(XTX)
+XTY <- crossprod(X,y)
+betahat<-solve(XTX,XTY) #betahat = (t(X)%*%X)^{-1}t(X)%*%y = mean of conditional posterior for beta   
+tau    <-tau0           
+library(mvtnorm)  
+
+par<-matrix(0,iter,p+1)  #storing iterations, beta (length p) + tau (length 1)
+for( i in 1:iter){
+  beta <- rmvnorm(1,mean=betahat,sigma=XTXinv/tau) #sample beta
+  beta <- as.numeric(beta)
+  err  <- y-X%*%beta
+  tau  <- rgamma(1,0.5*n,0.5*sum(err^2))          #sample tau.
+  par[i,] <-c(beta,tau)                           #store current round of beta, tau in par.
+}
+
+par <-par[-c(1:burnin),]                          #removing the first iterations
+return(par)  
+}
+```
+
+\newpage
+
+```{r}
+#Example of unblocked Gibbs sampling. We will update beta element by element. The arguments are
+
+#X:  matrix of predictors dimension n times p. Includes the intercept. 
+#y:  response vector, length p.
+#tau0: initial value for the residual precision. 
+#iter: number of iterations
+#burnin: number of initial iterations to remove
+Gibbs.lm2<-function(X,y,tau0,iter,burnin){
+p <- dim(X)[2]
+diagXTX <-colSums(X^2)     #calculates (t(X)%*%X)_{ii} for all i.
+XTY <- crossprod(X,y)
+betahat <- XTY/diagXTX     #component of conditional posteriors of beta_i's that is function of y. 
+tau    <-tau0
+
+beta<-rnorm(p)
+par<-matrix(0,iter,p+1)  
+for( i in 1:iter){
+  for(j in 1:p){   #This samples beta element by element
+  beta[j]<-0       #If we zero beta_j, then X_jbeta_j = Xbeta.
+  Xb     <-X%*%beta
+  diff   <-t(X[,j])%*%Xb/diagXTX[j]
+  beta[j] <- rnorm(1,mean=betahat[j]-diff,sd=1/sqrt(tau*diagXTX[j]) )
+}
+  err  <- y-X%*%beta
+  tau  <- rgamma(1,0.5*n,0.5*sum(err^2)) #samples tau from conditional posterior.
+  par[i,] <-c(beta,tau)
+}
+
+par <-par[-c(1:burnin),]
+return(par)  
+}
+```
+
+```{r}
+#Example of Gibbs sampling where matrix decompositions are used to diagonalise conditional 
+#posterior variances.This means beta is still updated as a block, but in a more efficient
+#way than in Gibbs.lm1. The arguments are
+
+#X:  matrix of predictors dimension n times p. Includes the intercept. 
+#y:  response vector, length p.
+#tau0: initial value for the residual precision. 
+#iter: number of iterations
+#burnin: number of initial iterations to remove
+Gibbs.lm3<-function(X,y,tau0,iter,burnin){
+p <- dim(X)[2]  #dimension of p
+svdX <-svd(X)   #matrix decomposition to speed up computation.
+U    <-svdX$u   #extracting components of decompositions.
+Lambda<-svdX$d
+V    <-svdX$v
+Vbhat <- crossprod(U,y)/Lambda #mean of conditional posterior for transformed parameters.
+tau <-tau0
+
+par<-matrix(0,iter,p+1)  
+for( i in 1:iter){
+  sqrttau<-sqrt(tau)
+  #posterior variances are diagonal for transformed parameters, so sequence of univariate normal draws suffices.
+  vbeta <- rnorm(p,mean=Vbhat,sd=1/(sqrttau*Lambda) ) 
+  beta <-V%*%vbeta   #back transform to original parameter.
+  err  <- y-X%*%beta
+  tau  <- rgamma(1,0.5*n,0.5*sum(err^2)) #sample tau
+  par[i,] <-c(beta,tau)
+}
+
+par <-par[-c(1:burnin),]  #remove initial iterations
+return(par)  
+}
+```
+
+
+*Solution*
+
+```{r}
+#Formatting data, and running chains.
+data<-read.csv('USJudgeRatings.csv')
+response<-data$RTEN  #response variable
+n<-dim(data)[1]
+intercept <-matrix(1,n,1) #Intercept (to be estimated without penalty)
+Pred<-data[,2:12]         #Predictor variables.
+Pred<-as.matrix(scale(Pred)) 
+X   <-cbind(intercept,Pred)
+
+system.time(chain1<-Gibbs.lm1(X=X,y=response,tau0=1,iter=10000,burnin=2000))
+system.time(chain2<-Gibbs.lm1(X=X,y=response,tau0=5,iter=10000,burnin=2000))
+system.time(chain3<-Gibbs.lm1(X=X,y=response,tau0=0.2,iter=10000,burnin=2000))
+
+system.time(chain4<-Gibbs.lm2(X=X,y=response,tau0=1,iter=10000,burnin=2000))
+system.time(chain5<-Gibbs.lm2(X=X,y=response,tau0=5,iter=10000,burnin=2000))
+system.time(chain6<-Gibbs.lm2(X=X,y=response,tau0=0.2,iter=10000,burnin=2000))
+
+system.time(chain7<-Gibbs.lm3(X=X,y=response,tau0=1,iter=10000,burnin=2000))
+system.time(chain8<-Gibbs.lm3(X=X,y=response,tau0=5,iter=10000,burnin=2000))
+system.time(chain9<-Gibbs.lm3(X=X,y=response,tau0=0.2,iter=10000,burnin=2000))
+
+
+library(coda)
+#Estimating Gelman -Rubin diagnostics.
+#Note 8000 iterations were retained, so 50:50 split is iteration 1:4000 and iteration 4001:8000
+
+#However first we must convert the output into mcmc lists for coda to interpret.
+ml1<-as.mcmc.list(as.mcmc((chain1[1:4000,])))
+ml2<-as.mcmc.list(as.mcmc((chain2[1:4000,])))
+ml3<-as.mcmc.list(as.mcmc((chain3[1:4000,])))
+ml4<-as.mcmc.list(as.mcmc((chain1[4000+1:4000,])))
+ml5<-as.mcmc.list(as.mcmc((chain2[4000+1:4000,])))
+ml6<-as.mcmc.list(as.mcmc((chain3[4000+1:4000,])))
+estml<-c(ml1,ml2,ml3,ml4,ml5,ml6)
+
+#Gelman-Rubin diagnostic.
+gelman.diag(estml)[[1]]
+
+#effective sample size.
+effectiveSize(estml)
+
+#However first we must convert the output into mcmc lists for coda to interpret.
+ml1<-as.mcmc.list(as.mcmc((chain4[1:4000,])))
+ml2<-as.mcmc.list(as.mcmc((chain5[1:4000,])))
+ml3<-as.mcmc.list(as.mcmc((chain6[1:4000,])))
+ml4<-as.mcmc.list(as.mcmc((chain4[4000+1:4000,])))
+ml5<-as.mcmc.list(as.mcmc((chain5[4000+1:4000,])))
+ml6<-as.mcmc.list(as.mcmc((chain6[4000+1:4000,])))
+estml<-c(ml1,ml2,ml3,ml4,ml5,ml6)
+
+#Gelman-Rubin diagnostic.
+gelman.diag(estml)[[1]]
+
+#effective sample size.
+effectiveSize(estml)
+
+#However first we must convert the output into mcmc lists for coda to interpret.
+ml1<-as.mcmc.list(as.mcmc((chain7[1:4000,])))
+ml2<-as.mcmc.list(as.mcmc((chain8[1:4000,])))
+ml3<-as.mcmc.list(as.mcmc((chain9[1:4000,])))
+ml4<-as.mcmc.list(as.mcmc((chain7[4000+1:4000,])))
+ml5<-as.mcmc.list(as.mcmc((chain8[4000+1:4000,])))
+ml6<-as.mcmc.list(as.mcmc((chain9[4000+1:4000,])))
+estml<-c(ml1,ml2,ml3,ml4,ml5,ml6)
+
+#Gelman-Rubin diagnostic.
+gelman.diag(estml)[[1]]
+
+#effective sample size.
+effectiveSize(estml)
+
+#Comparing one co-efficient (the 5th)
+plot(chain1[,5],type='l',ylim=c(-0.5,0.9),ylab=expression(beta[5]))
+lines(chain7[,5],type='l',col=3,ylab=expression(beta[5]))
+lines(chain4[,5],type='l',col=2,ylab=expression(beta[5]))
+legend('topright',legend=c('Block','Unblocked','Uses SVD'),col=1:3,lty=1,bty='n')
+
+#Reporting posterior means and credible intervals.
+#Means
+colMeans(rbind(chain1,chain2,chain3)) #Blocked
+colMeans(rbind(chain4,chain5,chain6)) #unblocked
+colMeans(rbind(chain7,chain8,chain9)) #Blocked but using svd to speed up computation.
+#Credible interval
+apply(rbind(chain1,chain2,chain3) ,2, FUN =function(x) quantile(x,c(0.025,0.975) )) #Blocked 
+apply(rbind(chain4,chain5,chain6) ,2, FUN =function(x) quantile(x,c(0.025,0.975) )) #Unblocked
+apply(rbind(chain7,chain8,chain9) ,2, FUN =function(x) quantile(x,c(0.025,0.975) )) #Blocked with svd.
+```
+
+
+
+
+\newpage
+
+\begin{itemize}
+\item Linear mixed model/ ridge regression (flat prior for $\bm \beta_0$, $p(\tau) = \text{Ga}(\alpha_e,\gamma_e)$, where $\tau = (\sigma^2)^{-1}$), $\bm \beta \sim \mathcal{N}({\bf 0},\sigma^2_\beta{\bf I})$, $(\sigma^2_\beta)^{-1} = \tau_\beta \sim  \text{Ga}(\alpha_\beta,\gamma_\beta)$.  
+\end{itemize}
+
+```{r}
+#Arguments are
+#X:  matrix of predictors dimension n times p with flat prior. Includes the intercept. 
+#Z:  matrix of predictors dimension n times q with normal prior for u.
+#y:  response vector, length p.
+#taue_0,tauu_0: initial value for the residual and random effect precision. 
+#a.u,b.u. Hyper-parameter for gamma prior for tau_u
+#a.e,b.e. Hyper-parameter for gamma prior for tau_e
+#iter: number of iterations
+#burnin: number of initial iterations to remove
+normalmm.Gibbs<-function(iter,Z,X,y,burnin,taue_0,tauu_0,a.u,b.u,a.e,b.e){
+  n   <-length(y) #no. observations
+  p   <-dim(X)[2] #no of fixed effect predictors.
+  q   <-dim(Z)[2] #no of random effect levels
+  tauu<-tauu_0
+  taue<-taue_0
+  #starting value for u.
+  u0   <-rnorm(q,0,sd=1/sqrt(tauu))
+
+  #Building combined predictor matrix.
+  W<-cbind(X,Z)            #for the joint conditional posterior for b,u
+  WTW <-crossprod(W)
+  library(mvtnorm)
+  
+  #storing results.
+  par <-matrix(0,iter,p+q+2)  #p beta coefficient, q u coefficients and 2 precision coefficient.
+  
+  #Create modified identity matrix for joint posterior.
+  I0  <-diag(p+q)
+  diag(I0)[1:p]<-0
+  
+  for(i in 1:iter){
+    #Conditional posteriors.
+    tauu <-rgamma(1,a.u+0.5*q,b.u+0.5*sum(u0^2)) #sample tau_u
+    #Updating component of normal posterior for beta,u
+    Prec <-WTW + tauu*I0/taue
+    P.mean <- solve(Prec)%*%crossprod(W,y)
+    P.var  <-solve(Prec)/taue
+    betau <-rmvnorm(1,mean=P.mean,sigma=P.var) #sample beta, u
+    betau <-as.numeric(betau)
+    err   <- y-W%*%betau
+    taue  <-rgamma(1,a.e+0.5*n,b.e+0.5*sum(err^2)) #sample tau_e
+    #storing iterations for beta, u, and standard deviation of e, u.
+    par[i,]<-c(betau,1/sqrt(tauu),1/sqrt(taue))
+    u0     <-betau[p+1:q]  #extracting u so we can update tau_u.
+  }
+  
+par <-par[-c(1:burnin),] #removing initial iterations
+colnames(par)<-c(paste('beta',1:p,sep=''),paste('u',1:q,sep=''),'sigma_b','sigma_e')  
+ return(par) 
+}
+```
+
+*Solution*
+
+```{r}
+system.time(chain10<-normalmm.Gibbs(iter=10000,Z=Pred,X=intercept,y=response,burnin=2000,taue_0=1,tauu_0=1,a.u=0.001,b.u=0.001,a.e=0.001,b.e=0.001))
+system.time(chain11<-normalmm.Gibbs(iter=10000,Z=Pred,X=intercept,y=response,burnin=2000,taue_0=0.2,tauu_0=5,a.u=0.001,b.u=0.001,a.e=0.001,b.e=0.001))
+system.time(chain12<-normalmm.Gibbs(iter=10000,Z=Pred,X=intercept,y=response,burnin=2000,taue_0=5,tauu_0=0.2,a.u=0.001,b.u=0.001,a.e=0.001,b.e=0.001))
+
+
+library(coda)
+#Estimating Gelman -Rubin diagnostics.
+#Note 8000 iterations were retained, so 50:50 split is iteration 1:4000 and iteration 4001:8000
+
+#However first we must convert the output into mcmc lists for coda to interpret.
+ml1<-as.mcmc.list(as.mcmc((chain10[1:4000,])))
+ml2<-as.mcmc.list(as.mcmc((chain11[1:4000,])))
+ml3<-as.mcmc.list(as.mcmc((chain12[1:4000,])))
+ml4<-as.mcmc.list(as.mcmc((chain10[4000+1:4000,])))
+ml5<-as.mcmc.list(as.mcmc((chain11[4000+1:4000,])))
+ml6<-as.mcmc.list(as.mcmc((chain12[4000+1:4000,])))
+estml<-c(ml1,ml2,ml3,ml4,ml5,ml6)
+
+#Gelman-Rubin diagnostic.
+gelman.diag(estml)[[1]]
+
+#effective sample size.
+effectiveSize(estml)
+
+#Reporting posterior means and credible intervals.
+#Means
+colMeans(rbind(chain10,chain11,chain12)) 
+#95 % central Credible interval
+apply(rbind(chain10,chain11,chain12) ,2, FUN =function(x) quantile(x,c(0.025,0.975) )) 
+```
+
+
+\newpage
+
+\begin{itemize}
+\item LASSO.
+\end{itemize}
+
+
+```{r}
+#Arguments
+#X:  matrix of predictors dimension n times p with flat prior. Includes the intercept. 
+#Z:  matrix of predictors dimension n times q with normal prior for u.
+#y:  response vector, length p.
+#taue_0: initial value for the residual precision. 
+#lambda: LASSO penalty
+#a.e,b.e. Hyper-parameter for gamma prior for tau_e
+#iter: number of iterations
+#burnin: number of initial iterations to remove
+normallasso.Gibbs<-function(iter,Z,X,y,burnin,taue_0,lambda,a.e,b.e){
+  library(LaplacesDemon)
+  n   <-length(y) #no. observations
+  p   <-dim(X)[2] #no of fixed effect predictors.
+  q   <-dim(Z)[2] #no of random effect levels
+  taue<-taue_0   
+  #Note Laplace distribution is compound of normal and exponential.
+  #This results with us working with a vector tau_u = dimension of predictor with LASSO penalty.
+  tauu <-rinvgaussian(q,lambda/abs(rnorm(q)),lambda^2) #Note LASSO can b
+  
+  #Building combined predictor matrix.
+  W<-cbind(X,Z)
+  WTW <-crossprod(W)
+  library(mvtnorm)
+  
+  #storing results.
+  par <-matrix(0,iter,p+q+1)
+  
+  for(i in 1:iter){
+    #Conditional posteriors.
+    
+    #Updating component of normal posterior for beta,u
+    Kinv  <-diag(p+q)    
+    diag(Kinv)[1:p]<-0
+    diag(Kinv)[p+1:q]<-tauu #Adding precision of predictors with LASSO penalty.
+    
+    Prec <-taue*WTW + Kinv  
+    P.var  <-solve(Prec)
+    P.mean <- taue*P.var%*%crossprod(W,y)
+    betau <-rmvnorm(1,mean=P.mean,sigma=P.var) #sampling beta,u 
+    betau <-as.numeric(betau)
+    err   <- y-W%*%betau
+    taue  <-rgamma(1,a.e+0.5*n,b.e+0.5*sum(err^2))      #sampling tau_e, residual precision.
+    #sampling tau_u, the augmented vector of precisions for predictor with LASSO penalty.
+    tauu  <-rinvgaussian(q,lambda/abs(betau[-c(1:p)]),lambda^2)  
+    
+    #storing iterations.
+    par[i,]<-c(betau,1/sqrt(taue))
+  }
+  
+par <-par[-c(1:burnin),] #removing early iterations
+colnames(par)<-c(paste('beta',1:p,sep=''),paste('u',1:q,sep=''),'sigma_e')  
+ return(par) 
+}
+```
+
+
+*Solution*
+
+```{r}
+system.time(chain13<-normallasso.Gibbs(iter=10000,Z=Pred,X=intercept,y=response,burnin=2000,taue_0=1,lambda=0.4,a.e=0.001,b.e=0.001))
+system.time(chain14<-normallasso.Gibbs(iter=10000,Z=Pred,X=intercept,y=response,burnin=2000,taue_0=0.2,lambda=0.4,a.e=0.001,b.e=0.001))
+system.time(chain15<-normallasso.Gibbs(iter=10000,Z=Pred,X=intercept,y=response,burnin=2000,taue_0=5,lambda=0.4,a.e=0.001,b.e=0.001))
+
+
+library(coda)
+#Estimating Gelman -Rubin diagnostics.
+#Note 8000 iterations were retained, so 50:50 split is iteration 1:4000 and iteration 4001:8000
+
+#However first we must convert the output into mcmc lists for coda to interpret.
+ml1<-as.mcmc.list(as.mcmc((chain13[1:4000,])))
+ml2<-as.mcmc.list(as.mcmc((chain14[1:4000,])))
+ml3<-as.mcmc.list(as.mcmc((chain15[1:4000,])))
+ml4<-as.mcmc.list(as.mcmc((chain13[4000+1:4000,])))
+ml5<-as.mcmc.list(as.mcmc((chain14[4000+1:4000,])))
+ml6<-as.mcmc.list(as.mcmc((chain15[4000+1:4000,])))
+estml<-c(ml1,ml2,ml3,ml4,ml5,ml6)
+
+#Gelman-Rubin diagnostic.
+gelman.diag(estml)[[1]]
+
+#effective sample size.
+effectiveSize(estml)
+
+#Reporting posterior means and credible intervals.
+#Means
+colMeans(rbind(chain13,chain14,chain15)) 
+#Credible interval
+apply(rbind(chain13,chain14,chain15) ,2, FUN =function(x) quantile(x,c(0.025,0.975) )) 
+```
+
+

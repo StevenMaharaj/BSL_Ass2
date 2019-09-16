@@ -1,0 +1,44 @@
+---
+title: 'Assignment 2, Question 1 MAST90125: Bayesian Statistical Learning'
+header-includes:
+   - \usepackage{bm}
+   - \usepackage{amsmath}
+output: 
+  pdf_document:
+    number_sections: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Due: Friday 20 September 2019**  
+\vspace{5 mm}
+
+**There are places in this assignment where R code will be required. Therefore set the random seed so assignment is reproducible.**
+
+```{r}
+set.seed(123456)  #Please change random seed to your student id number.
+```
+
+## Question One (12 marks)
+
+In generalised linear models, rather than estimating effects from the response data directly, we model through a link function, $\eta(\bm \theta)$, and assume $\eta(\bm \theta)_i = {\bf x}_i'\bm \beta$. The link function can be determined by re-arranging the likelihood of interest into the exponential family format,  	
+\begin{eqnarray} p(y|\bm \theta) = f(y)g(\bm \theta)e^{\eta(\bm \theta)'u(y)}. \end{eqnarray} 
+
+a) Re-arrange the Poisson probability mass function into the exponential family format to determine the canonical link function. The Poisson pmf is
+\[ Pr(y|\lambda) = \frac{\lambda^ye^{-\lambda}}{y!}.  \]
+
+
+To explore some properties of Metropolis sampling, consider the dataset \texttt{Warpbreaks.csv}, which is on LMS. This dataset contains information of the number of breaks in a consignment of wool. In addition, Wool type (A or B) and tension level (L, M or H) was recorded. 
+
+b) Fit a Poisson regression to the warpbreak data, with Wool type and tension treated as factors using the function \text{glm} in R. Report co-efficient estimates and the variance-covariance matrix.
+
+c) Fit a Bayesian Poisson regression using Metropolis sampling. Assume flat priors for all coefficients. Extract the design matrix $\bf X$ from the \texttt{glm} fitted in a). For the proposal distribution, use a Normal distribution with mean $\theta^{t-1}$ and variance-covariance matrix $c^2\hat{\bm \Sigma}$ where ${\bm \Sigma}$ is the variance-covariance matrix from the glm fit. Consider three candidates for $c$, $1.6/\sqrt{p}, 2.4/\sqrt{p}, 3.2\sqrt{p}$, where $p$ is the number of parameters estimated. Run the Metropolis algorithm for 10,000 iterations, and discard the first 5,000. Report the following:
+
+\begin{itemize}
+\item Check, using graphs and appropriate statistics, that each chain converges to the same distribution. To do this, you may find installing the R package \texttt{coda} helpful.
+\item The proportion of candidate draws that were accepted.
+\item The effective sample size for each chain. 
+\item What do you think is the best choice for $c$. Does this match the results stated in class on efficiency and optimal acceptance rate?
+\end{itemize}

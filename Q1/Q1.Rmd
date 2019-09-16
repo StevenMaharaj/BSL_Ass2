@@ -1,0 +1,161 @@
+---
+title: "Q1"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# read data
+WOOL <- read.csv("Warpbreaks.csv")
+```
+
+```{r}
+# model poisson regression 
+mod<-glm(breaks~., WOOL, family = poisson(link = "log"))
+summary(mod)
+vcov(mod)
+confint(mod,level=0.995)
+```
+
+
+Part c
+
+```{r}
+# Extracting the design matrix
+X <- model.matrix(mod)
+# betaest<-modest$coef
+sigma  <-vcov(mod)
+y <- WOOL$breaks
+p <-dim(X)[2]   #number of parameters
+```
+
+
+
+```{r}
+#Part one: function for performing Metropolis sampling for poisson regression normal random walk.
+#Inputs:
+#y: vector of responses
+#n: vector (or scalar) of trial sizes. 
+#X: predictor matrix including intercept.
+#c: rescaling for variance-covariance matrix, scalar J(lambda*|lambda(t-1)) = N(lambda(t-1), c^2*Sigma)
+#Sigma is variance covariance matrix for parameters in J()
+#iter: number of iterations
+#burnin: number of initial iterations to throw out.
+Metropolis.fn<-function(y,X,c,Sigma,iter,burnin){ 
+p <-dim(X)[2]   #number of parameters
+library(mvtnorm)
+beta0<-rnorm(p) #initial values.
+beta.sim<-matrix(0,iter,p) #matrix to store iterations
+beta.sim[1,]<-beta0   
+for(i in 1:(iter-1)){
+beta.cand <-rmvnorm(1,mean=beta.sim[i,],sigma=c^2*Sigma) #draw candidate (jointly)
+beta.cand <-as.numeric(beta.cand)  
+xbc        <-X%*%beta.cand      
+lambda.c        <-exp(xbc)   #Calculating probability of success for candidates.
+xb         <-X%*%beta.sim[i,]
+lambda.b        <-exp(xb)     #Calculating probability of success for lambda(t-1). 
+#difference of log joint distributions.
+r<-sum( dpois(y,lambda.c,log=TRUE)-dpois(y,lambda.b ,log=TRUE) )
+#Draw an indicator whether to accept/reject candidate
+ind<-rbinom(1,1,exp( min(c(r,0)) ) )
+beta.sim[i+1,]<- ind*beta.cand + (1-ind)*beta.sim[i,]
+}
+
+#Removing the iterations in burnin phase
+results<-data.frame(beta.sim[-c(1:burnin),])
+names(results)<-c('beta0','beta1','beta2','beta3') #column names
+return(results)
+}
+```
+
+```{r}
+library(coda)
+```
+
+```{r}
+# c =1.6
+par(mar=c(2,2,2,2))
+results16_1 <- Metropolis.fn(y,X,c=1.6/sqrt(p),Sigma = sigma,iter=10000,burnin =5000)
+results16_2 <- Metropolis.fn(y,X,c=1.6/sqrt(p),Sigma = sigma,iter=10000,burnin =5000)
+results16_3 <- Metropolis.fn(y,X,c=1.6/sqrt(p),Sigma = sigma,iter=10000,burnin =5000)
+c16_1 <- mcmc(results16_1[c('beta0','beta1','beta2','beta3')])
+c16_2 <- mcmc(results16_2[c('beta0','beta1','beta2','beta3')])
+c16_3 <- mcmc(results16_3[c('beta0','beta1','beta2','beta3')])
+c16 <- mcmc.list(c16_1,c16_2,c16_3)
+plot(c16)
+# Acceptance Rate 
+1 - rejectionRate(c16)
+# Gelman and Rubin diagnostic
+gelman.diag(c16)
+# Effective sample size
+effectiveSize(c16)
+```
+```{r}
+# c = 2.4
+par(mar=c(2,2,2,2))
+results24_1 <- Metropolis.fn(y,X,c=2.4/sqrt(p),Sigma = sigma,iter=10000,burnin =5000)
+results24_2 <- Metropolis.fn(y,X,c=2.4/sqrt(p),Sigma = sigma,iter=10000,burnin =5000)
+results24_3 <- Metropolis.fn(y,X,c=2.4/sqrt(p),Sigma = sigma,iter=10000,burnin =5000)
+c24_1 <- mcmc(results24_1[c('beta0','beta1','beta2','beta3')])
+c24_2 <- mcmc(results24_2[c('beta0','beta1','beta2','beta3')])
+c24_3 <- mcmc(results24_3[c('beta0','beta1','beta2','beta3')])
+c24 <- mcmc.list(c24_1,c24_2,c24_3)
+plot(c24)
+# Acceptance Rate 
+1 - rejectionRate(c24)
+# Gelman and Rubin diagnostic
+gelman.diag(c16)
+# Effective sample size
+effectiveSize(c24)
+```
+```{r}
+# c = 3.2
+par(mar=c(2,2,2,2))
+results32_1 <- Metropolis.fn(y,X,c=3.2/sqrt(p),Sigma = sigma,iter=10000,burnin =5000)
+results32_2 <- Metropolis.fn(y,X,c=3.2/sqrt(p),Sigma = sigma,iter=10000,burnin =5000)
+results32_3 <- Metropolis.fn(y,X,c=3.2/sqrt(p),Sigma = sigma,iter=10000,burnin =5000)
+c32_1 <- mcmc(results32_1[c('beta0','beta1','beta2','beta3')])
+c32_2 <- mcmc(results32_2[c('beta0','beta1','beta2','beta3')])
+c32_3 <- mcmc(results32_3[c('beta0','beta1','beta2','beta3')])
+c32 <- mcmc.list(c32_1,c32_2,c32_3)
+plot(c32)
+# Acceptance Rate 
+1 - rejectionRate(c32)
+# Gelman and Rubin diagnostic
+gelman.diag(c16)
+# Effective sample size
+effectiveSize(c32)
+```
+
+```{r}
+# comments 
+AcceptanceRate <- c(1 - rejectionRate(c16),1 - rejectionRate(c24),1 - rejectionRate(c32))
+EffectiveSampleSize <- c(effectiveSize(c16),effectiveSize(c24),effectiveSize(c32))
+rown <- c("c=1.6 beta0","c=1.6 beta1","c=1.6 beta2","c=1.6 beta3",
+          "c=2.4 beta0","c=2.4 beta1","c=2.4 beta2","c=2.4 beta3",
+          "c=3.2 beta0","c=3.2 beta1","c=3.2 beta2","c=3.2 beta3")
+summarychain <- data.frame(AcceptanceRate,EffectiveSampleSize,row.names = rown)
+summarychain
+
+
+```
+As we increase c the Acceptance rate decreases. With a larger c we have that the jumping distribution can draw samples from a larger range as seen from the density plots above.
+
+For the case c=2.4/sqrt(p) the is reported to be 0.2903247. This is in line with the results from the lectures as
+
+
+
+```{r}
+# c=1.6/sqrt(p)
+grc16 <- gelman.diag(c16)
+grc16$psrf
+# c=2.4/sqrt(p)
+grc24 <- gelman.diag(c24)
+grc24$psrf
+# c=3.2/sqrt(p)
+grc32 <- gelman.diag(c32)
+grc32$psrf
+```
