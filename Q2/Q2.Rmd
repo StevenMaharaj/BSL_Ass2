@@ -1,13 +1,15 @@
 ---
-title: ', Question 2 '
-header-includes:
-   - \usepackage{bm}
-   - \usepackage{amsmath}
-   - \usepackage{amsfonts}
-   - \usepackage{amssymb}
-output: 
+title: 'Steven Maharaj 695281 Assignment 2, Question 2 '
+output:
   pdf_document:
     number_sections: no
+  html_document:
+    df_print: paged
+header-includes:
+- \usepackage{bm}
+- \usepackage{amsmath}
+- \usepackage{amsfonts}
+- \usepackage{amssymb}
 ---
 
 ```{r setup, include=FALSE}
@@ -23,6 +25,7 @@ knitr::opts_chunk$set(echo = TRUE)
 set.seed(695281) #Please change random seed to your student id number.
 library(dplyr)
 library(mvtnorm)
+library(coda)
 ```
 
 
@@ -55,7 +58,7 @@ Sigma2<-sigma(model)^2
 Sigma2
 ```
 
-
+----------------------------------------------------------------------------
 PART B
 
 Define the Gibbs sampler function
@@ -69,6 +72,7 @@ Define the Gibbs sampler function
 #burnin: number of initial iterations to remove
 Gibbs.lm1<-function(X,y,tau0,iter,burnin){
 p <- dim(X)[2]       #number of predictors
+
 # X <- as.numeric(X)
 # y <- as.numeric(y)
 XTX <- crossprod(X)  
@@ -76,6 +80,8 @@ XTXinv <-solve(XTX)
 XTY <- crossprod(X,y)
 betahat<-solve(XTX,XTY) #betahat = (t(X)%*%X)^{-1}t(X)%*%y = mean of conditional posterior for beta   
 tau    <-tau0           
+T_rep <- rep(0,iter)
+T_y <- rep(0,iter)
 library(mvtnorm)  
 
 par<-matrix(0,iter,p+1)  #storing iterations, beta (length p) + tau (length 1)
@@ -89,13 +95,14 @@ for( i in 1:iter){
   # posterior checking
   Xbeta_rep <- X%*%as.vector(beta)
   y_rep <- Xbeta_rep+rnorm(length(y))*sqrt(1/tau)
-  # err_rep  <- y_rep-Xbeta_rep
-  # 
-  # T_rep[i,] <- sum(err_rep^2)
-  # T_y[i,] <- sum(err_^2)
-}
+  err_rep  <- y_rep-Xbeta_rep
 
-# table(T_rep>T_y)
+  T_rep[i] <- sum(err_rep^2)
+  T_y[i] <- sum(err^2)
+}
+print("Performing posterior predictive checking we have a p value")
+pval <- prop.table(table(T_rep>T_y))["TRUE"]
+print(pval)
 par <-par[-c(1:burnin),]                          #removing the first iterations
 par[,3] <- 1/par[,3]
 colnames(par) <- c('beta0','beta1','sigma2')
@@ -105,7 +112,7 @@ return(par)
 
 ```{r}
 data<-HironWild
-response<-data$logsf  #response variable
+response <- data$logsf  #response variable
 n<-dim(data)[1]
 intercept <-matrix(1,n,1) #Intercept (to be estimated without penalty)
 X <- cbind(intercept,data$time)
@@ -118,4 +125,71 @@ system.time(chain2<-Gibbs.lm1(X=X,y=response,tau0=1/Sigma2,iter=10000,burnin=100
 
 chain1 <- chain1[seq(1,dim(chain1)[1],by=2),]
 chain2 <- chain2[seq(1,dim(chain2)[1],by=2),]
+```
+
+```{r}
+chain12 <- rbind(chain1,chain2)
+chain_stats <- data.frame(matrix(nrow = 3,ncol =4 ))
+para_names <- c('beta0','beta1','sigma2','lower_CI95','upper_CI95')
+for (i in 1:3) {
+  chain <-  chain12[,i]
+  quat <- quantile(sort(chain), c(0.05, 0.975))
+  chain_stats[i,] <- c(mean(chain),sd(chain),quat)
+}
+names(chain_stats)<- c("posterior mean","std",'lower_CI95','upper_CI95')
+
+row.names(chain_stats) <- c('beta0','beta1','sigma2')
+
+# chain results
+chain_stats
+```
+
+--------------------------------------------------------------------------
+PART C
+```{r}
+# beta0
+
+
+plot(chain1[,1],type='l',ylab=expression(beta[0]))
+lines(chain1[,1],type='l',col=1,ylab=expression(beta[0]))
+lines(chain2[,1],type='l',col=2,ylab=expression(beta[0]))
+legend('topright',legend=c('Chain 1','Chain 2'),col=1:2,lty=1,bty='n')
+```
+
+
+```{r}
+# beta1
+plot(chain1[,2],type='l',ylab=expression(beta[1]))
+lines(chain1[,2],type='l',col=1,ylab=expression(beta[1]))
+lines(chain2[,2],type='l',col=2,ylab=expression(beta[1]))
+legend('topright',legend=c('Chain 1','Chain 2'),col=1:2,lty=1,bty='n') 
+```
+
+```{r}
+# sigma^2
+plot(chain1[,3],type='l',ylab=expression(sigma^2))
+lines(chain1[,3],type='l',col=1,ylab=expression(sigma^2))
+lines(chain2[,3],type='l',col=2,ylab=expression(sigma^2))
+legend('topright',legend=c('Chain 1','Chain 2'),col=1:2,lty=1,bty='n') 
+```
+
+```{r}
+#Gelman-Rubin diagnostic
+
+chains <- mcmc.list(mcmc(chain1),mcmc(chain2))
+gelman.diag(chains)[[1]]
+```
+--------------------------------------------------------------------------
+PART D
+
+```{r}
+# Fit regresssion for all of the data
+
+full_model <- lm(logsf ~ time,data = Hiron)
+summary(full_model)
+
+# Estimates
+full_model$coefficients
+# 95 % confidence intervals
+confint(full_model)
 ```
