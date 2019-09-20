@@ -1,5 +1,5 @@
 ---
-title: 'Assignment 2, Question 3 MAST90125: Bayesian Statistical Learning'
+title: 'Steven Maharaj 695281 Assignment 2, Question 3 MAST90125: Bayesian Statistical Learning'
 header-includes:
    - \usepackage{bm}
    - \usepackage{amsmath}
@@ -18,7 +18,7 @@ knitr::opts_chunk$set(echo = TRUE)
 **There are places in this assignment where R code will be required. Therefore set the random seed so assignment is reproducible.**
 
 ```{r}
-set.seed(123456)  #Please change random seed to your student id number.
+set.seed(695281)  #Please change random seed to your student id number.
 ```
 
 ## Question Three (18 marks)
@@ -42,7 +42,7 @@ a) Fit a generalised linear mixed model assuming a logistic link using \texttt{S
 
 Note that provided code assumes everything required is located in your working directory in R.
 
-```{r, eval = FALSE}
+```{r}
 #Step one: Importing data,  constructing design matrices and calculating matrix dimensions.
 dataX= read.csv("Contraceptionsubset.csv",header=TRUE)
 
@@ -102,7 +102,7 @@ model {
 \end{verbatim}
 \end{footnotesize}
 
-```{r results="hide", eval=FALSE}
+```{r}
 library(rstan)
 logistic.mm <-stan(file="logitmm.stan",data=c('Z','X','y','n','P','Q'),iter=2000,chains=4)
 print(logistic.mm)
@@ -110,6 +110,22 @@ print(logistic.mm)
 
 
 Note that in Stan, defaults for burn-in (warm-up) is one half of all iterations in stan, and no thinning. Note the code is written using the stan file and csv is in your working directory. Use the \texttt{print} function to report posterior means, standard deviations, 95 \% central credible intervals and state from the output whether you believe the chains have converged. Also report the reference categories for  *urban* and *livch*.
+
+
+Reporting for PART A:
+
+
+posterior means, standard deviations can be found in the above table. The lower limit of the 95 \% central credible intervals given by the column labeled "2.5\%" while the  upperer limit of the 95 \% central credible intervals given by the column labeled "97.5\%". 
+```{r}
+print(summary(logistic.mm)$summary)
+```
+
+Using the Gelman-Rubin diagnostic (Rhat) only 6 out of the 12 parameters These were beta[2],beta[3],beta[4],beta[5],beta[6],sigma had an Rhat value close to 1. All u parameter and beta[1] do not appear to converge thus the chain did not converge.
+
+For *urban* and *livch* the reference categories are "N" and "0" respectivley. This is infered from the way the DataFrame X was constructed. 
+`` X = cbind(rep(1,n),dataX$age,D1[,-1],D2[,-1])``
+
+
 
 b) An alternative to the logit link when analysing binary data is the probit. The probit link is defined as,
 

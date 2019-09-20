@@ -1,0 +1,23 @@
+---
+title: 'Steven Maharaj 695281 Assignment 2, Question 3 MAST90125: Bayesian Statistical Learning'
+header-includes:
+   - \usepackage{bm}
+   - \usepackage{amsmath}
+output: 
+  pdf_document:
+    number_sections: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Due: Friday 20 September 2019**  
+\vspace{5 mm}
+
+**There are places in this assignment where R code will be required. Therefore set the random seed so assignment is reproducible.**
+
+```{r}
+set.seed(695281)  #Please change random seed to your student id number.
+```
+## R Markdown
