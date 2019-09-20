@@ -19,6 +19,9 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r}
 set.seed(695281)  #Please change random seed to your student id number.
+library(dplyr)
+library(ggplot2)
+library(tidyr)
 ```
 
 ## Question Three (18 marks)
@@ -120,7 +123,7 @@ posterior means, standard deviations can be found in the above table. The lower 
 print(summary(logistic.mm)$summary)
 ```
 
-Using the Gelman-Rubin diagnostic (Rhat) only 6 out of the 12 parameters These were beta[2],beta[3],beta[4],beta[5],beta[6],sigma had an Rhat value close to 1. All u parameter and beta[1] do not appear to converge thus the chain did not converge.
+Using the Gelman-Rubin diagnostic (Rhat) only 6 out of the 12 parameters These were beta[2],beta[3],beta[4],beta[5],beta[6],sigma had an Rhat value close to 1. All u parameters and beta[1] do not appear to converge thus the chain did not converge.
 
 For *urban* and *livch* the reference categories are "N" and "0" respectivley. This is infered from the way the DataFrame X was constructed. 
 `` X = cbind(rep(1,n),dataX$age,D1[,-1],D2[,-1])``

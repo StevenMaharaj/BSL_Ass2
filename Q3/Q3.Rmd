@@ -18,6 +18,64 @@ knitr::opts_chunk$set(echo = TRUE)
 **There are places in this assignment where R code will be required. Therefore set the random seed so assignment is reproducible.**
 
 ```{r}
-set.seed(695281)  #Please change random seed to your student id number.
+set.seed(695281)#Please change random seed to your student id number.
+library(dplyr)
+library(tidyr)
+library(ggplot2)
 ```
-## R Markdown
+
+---
+PART A
+
+
+```{r}
+Contraceptionsubset <- read.csv("Contraceptionsubset.csv")
+```
+
+---
+
+Part B
+
+```{r}
+# case 2 -inf < x < 0
+mu <- 0.5
+sigma <- 1
+a <- 0 # a go to -infinity
+b <- 10000 
+n<- 10000
+
+u <- runif(n,pnorm(a,mean=mu,sd=sigma),pnorm(b,mean=mu,sd=sigma))
+nor_fac <- pnorm(b,mean=mu,sd=sigma)-pnorm(a,mean=mu,sd=sigma)
+x <- qnorm(nor_fac*u,mean=mu,sd=sigma)
+u_true <- dnorm(x,mean=mu,sd=sigma)/nor_fac # true density 
+# te <- dnorm(x,mean=mu,sd=sigma)/(pnorm(b,mean=mu,sd=sigma)-pnorm(a,mean=mu,sd=sigma))
+# df <- data.frame(x = rbind(x,x),density = rbind(x1,x2))
+df <- data.frame(x,u,u_true) %>% gather(... = -x)
+
+p <- ggplot(df, aes(x,value))
+p1<- p+ geom_line(aes(color=factor(key)))
+print(p1)
+```
+
+```{r}
+# case 2 -inf < x < 0
+mu <- 0.5
+sigma <- 1
+a <- -10 # a go to -infinity
+b <- 0 
+n<- 10000
+
+u <- runif(n,pnorm(a,mean=mu,sd=sigma),1)
+nor_fac <- (pnorm(b,mean=mu,sd=sigma)-pnorm(a,mean=mu,sd=sigma))
+x <- qnorm(nor_fac*u,mean=mu,sd=sigma)
+u_true <- dnorm(x,mean=mu,sd=sigma)/nor_fac # true density 
+# te <- dnorm(x,mean=mu,sd=sigma)/(pnorm(b,mean=mu,sd=sigma)-pnorm(a,mean=mu,sd=sigma))
+# df <- data.frame(x = rbind(x,x),density = rbind(x1,x2))
+df <- data.frame(x,u,u_true) %>% gather(... = -x)
+
+p <- ggplot(df, aes(x,value))
+p1<- p+ geom_line(aes(color=factor(key)))
+print(p1)
+```
+
+
