@@ -1,0 +1,147 @@
+---
+title: 'Assignment 2, Question 3 MAST90125: Bayesian Statistical Learning'
+header-includes:
+   - \usepackage{bm}
+   - \usepackage{amsmath}
+output: 
+  pdf_document:
+    number_sections: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Due: Friday 20 September 2019**  
+\vspace{5 mm}
+
+**There are places in this assignment where R code will be required. Therefore set the random seed so assignment is reproducible.**
+
+```{r}
+set.seed(123456)  #Please change random seed to your student id number.
+```
+
+## Question Three (18 marks)
+
+A group of 453 Bangladeshi women in 5 districts were asked about contraceptive use. The response variable *use* is an indicator for contraceptive use (coded N for no and Y for yes). Other covariates of interest are categorical variables for geographical location *district* (5 levels), and *urban* (2 levels), and number of living children *livch* (4 levels), and the continuous covariate for standardised age *age*.A random intercept for the district was suggested. This suggested the following model should be fitted,
+
+\[ \bm \theta = {\bf Z}{\bf u} + {\bf X}{\bm \beta},  \]
+
+where $\bm \theta$ is a link function, $\bf Z$ is an indicator variable for district, $\bf u$ is a random intercept with prior $p({\bf u}) = \mathcal{N}({\bf 0},\sigma^2_u{\bf I})$, and ${\bf X}$ is a design matrix for fixed effects $\bm \beta$, where $\bm \beta$ includes the coefficients for the intercept, urban status, living children, and age. 
+
+Data can be downloaded from LMS as \texttt{Contraceptionsubset.csv}.
+
+a) Fit a generalised linear mixed model assuming a logistic link using \texttt{Stan}. The R and stan code below covers the following steps.
+
+\begin{itemize}
+\item Importing the data.
+\item Constructing design matrices.
+\item Provides code to go into the stan file.
+\item Running stan in R. This assumes your stan file is called *logitmm.stan*, and that you will run the sampler for 2000 iterations and 4 chains.
+\end{itemize}
+
+Note that provided code assumes everything required is located in your working directory in R.
+
+```{r, eval = FALSE}
+#Step one: Importing data,  constructing design matrices and calculating matrix dimensions.
+dataX= read.csv("Contraceptionsubset.csv",header=TRUE)
+
+n<-dim(dataX)[1]
+Z    = table(1:n,dataX$district)     #incidence matrix for district
+Q    = dim(Z)[2]
+D1   = table(1:n,dataX$livch) #Dummy indicator for living children
+D2   = table(1:n,dataX$urban) #Dummy indicator for urban status
+
+#fixed effect design matrix 
+X    = cbind(rep(1,n),dataX$age,D1[,-1],D2[,-1])
+P    = dim(X)[2]
+y    = rep(0,n)
+y[dataX$use %in% 'Y'] = 1
+
+```
+
+
+An example stan file.
+\begin{footnotesize}
+\begin{verbatim}
+//
+// This Stan program defines a logistic mixed model
+//
+// Learn more about model development with Stan at:
+//
+//    http://mc-stan.org/users/interfaces/rstan.html
+//    https://github.com/stan-dev/rstan/wiki/RStan-Getting-Started
+//
+
+data {
+  int<lower=0> n;   //number of observations
+  int<lower=0> Q;   //number of random effect levels
+  int<lower=0> P;   //number of fixed effect levels
+  int y[n];      //response vector
+  matrix[n,Q] Z;     //indicator matrix for random effect levels
+  matrix[n,P] X;     //design matrix for fixed effects
+}
+
+// The parameters accepted by the model. 
+// accepts three sets of parameters 'beta', 'u' and 'sigma'.
+parameters {
+  vector[P] beta; //vector of fixed effects of length P.
+  vector[Q] u; //vector of random effects of length Q.
+  real<lower=0> sigma; //random effect standard deviation
+}
+
+
+// The model to be estimated. We model the output
+// 'y' to be bernoulli with logit link function, 
+// and assume a i.i.d. normal prior for u.
+model {
+  u ~ normal(0,sigma);                //prior for random effects.
+  y ~ bernoulli_logit(X*beta+ Z*u);  //likelihood
+  
+}
+\end{verbatim}
+\end{footnotesize}
+
+```{r results="hide", eval=FALSE}
+library(rstan)
+logistic.mm <-stan(file="logitmm.stan",data=c('Z','X','y','n','P','Q'),iter=2000,chains=4)
+print(logistic.mm)
+```
+
+
+Note that in Stan, defaults for burn-in (warm-up) is one half of all iterations in stan, and no thinning. Note the code is written using the stan file and csv is in your working directory. Use the \texttt{print} function to report posterior means, standard deviations, 95 \% central credible intervals and state from the output whether you believe the chains have converged. Also report the reference categories for  *urban* and *livch*.
+
+b) An alternative to the logit link when analysing binary data is the probit. The probit link is defined as,
+
+\begin{eqnarray}
+y_i &=& \begin{cases} 1 & \text{if $z_i \geq 0$}\\ 
+0 & \text{if $z_i < 0$}\\ 
+\end{cases} \nonumber \\
+z_i &=& {\bf x}_i'\bm \beta + \epsilon_i, \quad \epsilon \sim \mathcal{N}(0,1). \nonumber 
+\end{eqnarray}
+
+In lecture 14, we showed how by letting $z_i$ be normal, probit regression can be fitted using a Gibbs sampler, but to do so, it requires the ability to sample from a truncated normal defined on either $(-\infty,0)$ (if $y_i = 0$) or $(0,\infty)$ (if $y_i = 1$). Check by comparing the empirical and the true density that a modified version of the inverse cdf method can be used to produce draws from a truncated normal. Do this for the case where $x \in (0,\infty)$ and $x \in (-\infty,0)$ with parameters $\mu=0.5$ and $\sigma=1$.
+
+Hints: If $y$ is drawn from a truncated normal with lower bound $a$, upper bound $b$ and parameters $\mu, \sigma^2$ then then $p(y|\mu,\sigma^2,a,b)$ is 
+
+\[ \frac{\frac{1}{\sqrt{2\pi\sigma^2}}e^{-(y-\mu)^2/2}}{\int_{-\infty}^b \frac{1}{\sqrt{2\pi\sigma^2}}e^{-(y-\mu)^2/2} dy - \int_{-\infty}^a \frac{1}{\sqrt{2\pi\sigma^2}}e^{-(y-\mu)^2/2} dy}, \]
+
+which in \texttt{R} means the truncated normal density can be written as 
+
+\begin{footnotesize}
+\begin{verbatim}
+dnorm(x,mean=mu,sd=sigma)/(pnorm(b,mean=mu,sd=sigma)-pnorm(a,mean=mu,sd=sigma))
+\end{verbatim}
+\end{footnotesize}
+
+The inverse cdf method involves drawing $v$ from $U(0,1)$ so that $x \sim p(x)$ can be found solving $x=F^{-1}(x)$, where $F$ is the cdf. If the only change compared to drawing from a normal distribution is truncation, think about what happens to the bounds of the uniform distribution. 
+
+
+c) Implement a Gibbs sampler to fit the same mixed model as fitted in Stan in a), but now with a probit link. As before, fit 4 chains, each running for 2000 iterations, with the first 1000 iterations discarded as burn-in. Perform graphical convergence checks and Gelman-Rubin diagnostics. Report posterior means, standard deviations and 95 \% central credible intervals for $\sigma, \bm \beta, {\bf u}$ by combining chains. 
+
+d) For the co-efficients $\bm \beta$, $\bf u$, calculate the mean of the ratio of the posterior means $\bm \beta_{i,\text{logit}}/\bm \beta_{i,\text{probit}}, {\bf u}_{i,\text{logit}}/{\bf u}_{i,\text{probit}}$ obtained when fitting the logistic mixed model and the probit mixed model. To do this, you will need to apply the \texttt{extract} function to the stan model object. Once calculated, multiply the iterations obtained assuming a probit link by this constant and compare to the iterations obtained assuming a logit link.   
+
+e) The logistic link can be written in the same way as the probit link, but instead of $e_i\sim \mathcal{N}(0,1)$, the error term is $e_i \sim \text{Logistic}(0,1)$. By evaluating the standard normal and logistic inverse cdfs and superimposing the line $y = mx$ where $m$ is the posterior ratio, do you think the results in d) were surprising.
+
+
+
