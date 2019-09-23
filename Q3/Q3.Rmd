@@ -118,4 +118,62 @@ fill=c("blue","red")
 library(TruncatedNormal)
 rtnorm(n = 10, mu = 2, lb = 1:10, ub = 2:11, method = "fast")```
 
+```
+
+
+___
+PART C 
+
+```{r}
+#Arguments are
+#X:  matrix of predictors dimension n times p with flat prior. Includes the intercept. 
+#Z:  matrix of predictors dimension n times q with normal prior for u.
+#y:  response vector, length p.
+#taue_0,tauu_0: initial value for the residual and random effect precision. 
+#a.u,b.u. Hyper-parameter for gamma prior for tau_u
+#a.e,b.e. Hyper-parameter for gamma prior for tau_e
+#iter: number of iterations
+#burnin: number of initial iterations to remove
+normalmm.Gibbs<-function(iter,Z,X,y,burnin,taue_0,tauu_0,a.u,b.u,a.e,b.e){
+  n   <-length(y) #no. observations
+  p   <-dim(X)[2] #no of fixed effect predictors.
+  q   <-dim(Z)[2] #no of random effect levels
+  tauu<-tauu_0
+  taue<-taue_0
+  #starting value for u.
+  u0   <-rnorm(q,0,sd=1/sqrt(tauu))
+
+  #Building combined predictor matrix.
+  W<-cbind(X,Z)            #for the joint conditional posterior for b,u
+  WTW <-crossprod(W)
+  library(mvtnorm)
+  
+  #storing results.
+  par <-matrix(0,iter,p+q+2)  #p beta coefficient, q u coefficients and 2 precision coefficient.
+  
+  #Create modified identity matrix for joint posterior.
+  I0  <-diag(p+q)
+  diag(I0)[1:p]<-0
+  
+  for(i in 1:iter){
+    #Conditional posteriors.
+    tauu <-rgamma(1,a.u+0.5*q,b.u+0.5*sum(u0^2)) #sample tau_u
+    #Updating component of normal posterior for beta,u
+    Prec <-WTW + tauu*I0/taue
+    P.mean <- solve(Prec)%*%crossprod(W,y)
+    P.var  <-solve(Prec)/taue
+    betau <-rmvnorm(1,mean=P.mean,sigma=P.var) #sample beta, u
+    betau <-as.numeric(betau)
+    err   <- y-W%*%betau
+    #sample tau_e
+    #storing iterations for beta, u, and standard deviation of e, u.
+    par[i,]<-c(betau,1/sqrt(tauu),1)
+    u0     <-betau[p+1:q]  #extracting u so we can update tau_u.
+  }
+  
+par <-par[-c(1:burnin),] #removing initial iterations
+colnames(par)<-c(paste('beta',1:p,sep=''),paste('u',1:q,sep=''),'sigma_b','sigma_e')  
+ return(par) 
+}
+```
 
