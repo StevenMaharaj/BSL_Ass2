@@ -22,6 +22,7 @@ set.seed(695281)#Please change random seed to your student id number.
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+library(TruncatedNormal)
 ```
 
 ---
@@ -36,46 +37,85 @@ Contraceptionsubset <- read.csv("Contraceptionsubset.csv")
 
 Part B
 
+Case $x \in (0,\infty)$
 ```{r}
-# case 2 -inf < x < 0
-mu <- 0.5
-sigma <- 1
-a <- 0 # a go to -infinity
-b <- 10000 
-n<- 10000
+mu = 0.5
+sigma =  1 # sigma
 
-u <- runif(n,pnorm(a,mean=mu,sd=sigma),pnorm(b,mean=mu,sd=sigma))
-nor_fac <- pnorm(b,mean=mu,sd=sigma)-pnorm(a,mean=mu,sd=sigma)
-x <- qnorm(nor_fac*u,mean=mu,sd=sigma)
-u_true <- dnorm(x,mean=mu,sd=sigma)/nor_fac # true density 
-# te <- dnorm(x,mean=mu,sd=sigma)/(pnorm(b,mean=mu,sd=sigma)-pnorm(a,mean=mu,sd=sigma))
-# df <- data.frame(x = rbind(x,x),density = rbind(x1,x2))
-df <- data.frame(x,u,u_true) %>% gather(... = -x)
+a <- 0
+b <- 10 # A number going to infinity
+n <- 5000
 
-p <- ggplot(df, aes(x,value))
-p1<- p+ geom_line(aes(color=factor(key)))
-print(p1)
+invtn <- function(n,mu,sigma,a,b){
+  u <- runif(n)
+  return(qnorm(pnorm(a)+u*(pnorm(b) - pnorm(a)))*sigma + mu)
+}
+
+# Using my inverse cdf method
+x_empircal <- invtn(n,mu,sigma,a,b)
+
+# using the TruncatedNormal package 
+x_empircal <- rtnorm(n = n, mu = mu, lb = a, ub = b, method = "fast")
+empircal_den <- density(x_empircal)
+
+x <- seq(a,b,length.out = n)
+y <- dnorm(empircal_den$x,mean=mu,sd=sigma)/(pnorm(b,mean=mu,sd=sigma)-pnorm(a,mean=mu,sd=sigma))
+
+plot(empircal_den$x,empircal_den$y,
+main="Comparing densities for modified inverse CDF method",
+ylab="Density",
+xlab = "x",
+type="l",
+col="blue")
+lines(empircal_den$x, y, col="red")
+legend("topright",
+c("Empirical","True"),
+fill=c("blue","red")
+)
+
 ```
 
+
+
+Case $x \in (-\infty,0)$
 ```{r}
-# case 2 -inf < x < 0
-mu <- 0.5
-sigma <- 1
-a <- -10 # a go to -infinity
-b <- 0 
-n<- 10000
+mu = 0.5
+sigma =  1 # sigma
 
-u <- runif(n,pnorm(a,mean=mu,sd=sigma),1)
-nor_fac <- (pnorm(b,mean=mu,sd=sigma)-pnorm(a,mean=mu,sd=sigma))
-x <- qnorm(nor_fac*u,mean=mu,sd=sigma)
-u_true <- dnorm(x,mean=mu,sd=sigma)/nor_fac # true density 
-# te <- dnorm(x,mean=mu,sd=sigma)/(pnorm(b,mean=mu,sd=sigma)-pnorm(a,mean=mu,sd=sigma))
-# df <- data.frame(x = rbind(x,x),density = rbind(x1,x2))
-df <- data.frame(x,u,u_true) %>% gather(... = -x)
+a <- -10
+b <- 0 # A number going to infinity
+n <- 5000
 
-p <- ggplot(df, aes(x,value))
-p1<- p+ geom_line(aes(color=factor(key)))
-print(p1)
+
+# Using my inverse cdf method
+x_empircal <- invtn(n,mu,sigma,a,b)
+
+# using the TruncatedNormal package 
+x_empircal <- rtnorm(n = n, mu = mu, lb = a, ub = b, method = "fast")
+
+empircal_den <- density(x_empircal)
+
+x <- seq(a,b,length.out = n)
+
+y <- dnorm(empircal_den$x,mean=mu,sd=sigma)/(pnorm(b,mean=mu,sd=sigma)-pnorm(a,mean=mu,sd=sigma))
+
+plot(empircal_den$x,empircal_den$y,
+main="Comparing densities for modified inverse CDF method",
+ylab="Density",
+xlab = "x",
+type="l",
+col="blue")
+lines(empircal_den$x, y, col="red")
+legend("topleft",
+c("Empirical","True"),
+fill=c("blue","red")
+)
+
 ```
+
+
+```{r}
+library(TruncatedNormal)
+rtnorm(n = 10, mu = 2, lb = 1:10, ub = 2:11, method = "fast")```
 
 

@@ -22,6 +22,7 @@ set.seed(695281)  #Please change random seed to your student id number.
 library(dplyr)
 library(ggplot2)
 library(tidyr)
+library(TruncatedNormal)
 ```
 
 ## Question Three (18 marks)
@@ -154,6 +155,86 @@ dnorm(x,mean=mu,sd=sigma)/(pnorm(b,mean=mu,sd=sigma)-pnorm(a,mean=mu,sd=sigma))
 \end{footnotesize}
 
 The inverse cdf method involves drawing $v$ from $U(0,1)$ so that $x \sim p(x)$ can be found solving $x=F^{-1}(x)$, where $F$ is the cdf. If the only change compared to drawing from a normal distribution is truncation, think about what happens to the bounds of the uniform distribution. 
+
+
+Answer:
+Part B
+
+Case $x \in (0,\infty)$
+```{r}
+mu = 0.5
+sigma =  1 # sigma
+
+a <- 0
+b <- 10 # A number going to infinity
+n <- 5000
+
+invtn <- function(n,mu,sigma,a,b){
+  u <- runif(n)
+  return(qnorm(pnorm(a)+u*(pnorm(b) - pnorm(a)))*sigma + mu)
+}
+
+# Using my inverse cdf method
+x_empircal <- invtn(n,mu,sigma,a,b)
+
+# using the TruncatedNormal package 
+x_empircal <- rtnorm(n = n, mu = mu, lb = a, ub = b, method = "fast")
+empircal_den <- density(x_empircal)
+
+x <- seq(a,b,length.out = n)
+y <- dnorm(empircal_den$x,mean=mu,sd=sigma)/(pnorm(b,mean=mu,sd=sigma)-pnorm(a,mean=mu,sd=sigma))
+
+plot(empircal_den$x,empircal_den$y,
+main="Comparing densities for modified inverse CDF method",
+ylab="Density",
+xlab = "x",
+type="l",
+col="blue")
+lines(empircal_den$x, y, col="red")
+legend("topright",
+c("Empirical","True"),
+fill=c("blue","red")
+)
+
+```
+
+
+
+Case $x \in (-\infty,0)$
+```{r}
+mu = 0.5
+sigma =  1 # sigma
+
+a <- -10
+b <- 0 # A number going to infinity
+n <- 5000
+
+
+# Using my inverse cdf method
+x_empircal <- invtn(n,mu,sigma,a,b)
+
+# using the TruncatedNormal package 
+x_empircal <- rtnorm(n = n, mu = mu, lb = a, ub = b, method = "fast")
+
+empircal_den <- density(x_empircal)
+
+x <- seq(a,b,length.out = n)
+
+y <- dnorm(empircal_den$x,mean=mu,sd=sigma)/(pnorm(b,mean=mu,sd=sigma)-pnorm(a,mean=mu,sd=sigma))
+
+plot(empircal_den$x,empircal_den$y,
+main="Comparing densities for modified inverse CDF method",
+ylab="Density",
+xlab = "x",
+type="l",
+col="blue")
+lines(empircal_den$x, y, col="red")
+legend("topleft",
+c("Empirical","True"),
+fill=c("blue","red")
+)
+
+```
 
 
 c) Implement a Gibbs sampler to fit the same mixed model as fitted in Stan in a), but now with a probit link. As before, fit 4 chains, each running for 2000 iterations, with the first 1000 iterations discarded as burn-in. Perform graphical convergence checks and Gelman-Rubin diagnostics. Report posterior means, standard deviations and 95 \% central credible intervals for $\sigma, \bm \beta, {\bf u}$ by combining chains. 
