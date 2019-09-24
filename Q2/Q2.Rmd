@@ -26,6 +26,8 @@ set.seed(695281) #Please change random seed to your student id number.
 library(dplyr)
 library(mvtnorm)
 library(coda)
+library(ggplot2)
+library(tidyr)
 ```
 
 
@@ -36,7 +38,6 @@ PART A
 # Read the Data
 Hiron <- read.csv("Hiron.csv")
 HironHomo <- Hiron %>%filter(homc282y==1) %>% select(-idnum)
-Hiron <- read.csv("Hiron.csv")
 HironWild <- Hiron %>%filter(homc282y==0) %>% select(-idnum)
 ```
 

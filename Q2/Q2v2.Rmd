@@ -1,0 +1,164 @@
+---
+title: 'Steven Maharaj 695281 Assignment 2, Question 2 '
+header-includes:
+   - \usepackage{bm}
+   - \usepackage{amsmath}
+   - \usepackage{amsfonts}
+   - \usepackage{amssymb}
+output: 
+  pdf_document:
+    number_sections: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Due: Friday 20 September 2019**  
+\vspace{5 mm}
+
+**There are places in this assignment where R code will be required. Therefore set the random seed so assignment is reproducible.**
+
+```{r}
+set.seed(695281) #Please change random seed to your student id number.
+library(dplyr)
+library(mvtnorm)
+library(coda)
+library(ggplot2)
+library(tidyr)
+```
+
+----
+PART B
+
+For This Question we define proper priors for $\bm \beta, \bm \tau$ using the results from part a. That is using the following formula.
+
+$$p(\theta| \bm y) = \frac{p( \bm{y_2}|\theta) p(\theta| \bm{y_1})}{p( \bm{y_2}|\bm{y_1})}$$
+
+Using the posterior from the previous part we let the prior for this part be
+
+$$ p(\bm \beta|\tau) = \mathcal{N}(\hat{\bm \beta_1},(\bm X_1 \bm X_1)^{-1}/ \tau) $$
+$$ p(\bm \beta|\tau) = Ga(\frac{n_1 - p}{2},\frac{(n_1 - p)s^2}{2}) $$
+where the subscript 1 indicates the results are from group 1 (analysed in 2a) alone. Using the results from lecture 13, we drop the prior for $\tau_{\beta}$, and in all other places in the joint distribution, replace $\tau_{\beta}$ and $\tau_{e}$ with $\tau$.
+
+
+- $\bm K = (\bm X_1 \bm X_1)^{-1}$
+- $\bm \beta_0 = \hat{\bm \beta_1}$
+- $\alpha = \frac{n_1 - p}{2}$
+- $\gamma = \frac{(n_1 - p)s^2}{2}$
+
+Thus we get the following conditional posteriors
+
+$$ p\left(\tau | \mathbf{y}, \boldsymbol{\beta}, \boldsymbol{\beta}_{0}, \mathbf{K}\right)=\mathrm{Ga}\left(\alpha+\frac{n+p}{2}, \gamma+\frac{(\mathbf{y}-\mathbf{X} \boldsymbol{\beta})^{\prime}(\mathbf{y}-\mathbf{X} \boldsymbol{\beta})+\left(\boldsymbol{\beta}-\boldsymbol{\beta}_{0}\right)^{\prime} \mathbf{K}^{-1}\left(\boldsymbol{\beta}-\boldsymbol{\beta}_{0}\right)}{2}\right)$$
+
+$$p\left(\bm \beta | \mathbf{y}, \boldsymbol{\beta}_{0}, \mathbf{K},\tau\right)  =\mathcal{N}\left(\left(\mathbf{X}^{\prime} \mathbf{X}+\mathbf{K}^{-1}\right)^{-1}\left(\mathbf{X}^{\prime} \mathbf{y}+\mathbf{K}^{-1} \beta_{0}\right),\left(\mathbf{X}^{\prime} \mathbf{X}+\mathbf{K}^{-1}\right)^{-1} / \tau\right) $$
+
+Below we fit a Bayesian regression using a Gibbs sampler to **only the wildtype (\texttt{homc282y}=0) data**.
+
+```{r}
+# define our Gibbs sampler function
+
+
+#Arguments are
+#X:  matrix of predictors dimension n times p with flat prior. Includes the intercept. 
+#Z:  matrix of predictors dimension n times q with normal prior for u.
+#y:  response vector, length p.
+#taue_0,tauu_0: initial value for the residual and random effect precision. 
+#a.u,b.u. Hyper-parameter for gamma prior for tau_u
+#a.e,b.e. Hyper-parameter for gamma prior for tau_e
+#iter: number of iterations
+#burnin: number of initial iterations to remove
+normalmm.Gibbs<-function(iter,Z,X,y,burnin,taue_0,tauu_0,a.u,b.u,a.e,b.e){
+  n   <-length(y) #no. observations
+  p   <-dim(X)[2] #no of fixed effect predictors.
+  q   <-dim(Z)[2] #no of random effect levels
+  tauu<-tauu_0
+  taue<-taue_0
+  #starting value for u.
+  u0   <-rnorm(q,0,sd=1/sqrt(tauu))
+
+  #Building combined predictor matrix.
+  W<-cbind(X,Z)            #for the joint conditional posterior for b,u
+  WTW <-crossprod(W)
+  library(mvtnorm)
+  
+  #storing results.
+  par <-matrix(0,iter,p+q+2)  #p beta coefficient, q u coefficients and 2 precision coefficient.
+  
+  #Create modified identity matrix for joint posterior.
+  I0  <-diag(p+q)
+  diag(I0)[1:p]<-0
+  
+  for(i in 1:iter){
+    #Conditional posteriors.
+    tauu <-rgamma(1,a.u+0.5*q,b.u+0.5*sum(u0^2)) #sample tau_u
+    #Updating component of normal posterior for beta,u
+    Prec <-WTW + tauu*I0/taue
+    P.mean <- solve(Prec)%*%crossprod(W,y)
+    P.var  <-solve(Prec)/taue
+    betau <-rmvnorm(1,mean=P.mean,sigma=P.var) #sample beta, u
+    betau <-as.numeric(betau)
+    err   <- y-W%*%betau
+    taue  <-rgamma(1,a.e+0.5*n,b.e+0.5*sum(err^2)) #sample tau_e
+    #storing iterations for beta, u, and standard deviation of e, u.
+    par[i,]<-c(betau,1/sqrt(tauu),1/sqrt(taue))
+    u0     <-betau[p+1:q]  #extracting u so we can update tau_u.
+  }
+  
+par <-par[-c(1:burnin),] #removing initial iterations
+colnames(par)<-c(paste('beta',1:p,sep=''),paste('u',1:q,sep=''),'sigma_b','sigma_e')  
+ return(par) 
+}
+```
+
+
+
+
+```{r}
+# Define inputs for Gibbs sampler
+
+Kinv <- XTX
+X2 <- cbind(matrix(1,length(HironWild$time),1),HironWild$time)
+y <- HironWild$logsf
+b0 <- model$coefficients
+n1 <-dim(X)[1]
+p   <-dim(X2)[2]
+a <-  (n1-p)*0.5
+s2 <- sum((HironHomo$logsf - X%*%b0)^2)/(n1-p)
+g <- (n1-p)*s2*0.5
+
+ 
+```
+```{r}
+Gibbsq2 <- function(iter,X,y,burnin,tau_0,a,g,b0,Kinv){
+  n  <-length(y) #no. observations
+  p   <-dim(X)[2] #no of fixed effect predictors.
+  XXkii <- solve(crossprod(X) + Kinv)
+  P.mean <- XXkii%*%(t(X)%*%y + Kinv%*%b0)
+  
+  b <- rnorm(p,0,sd=1/sqrt(tau_0))
+  tau<- tau_0
+  
+  #storing results.
+  par <-matrix(0,iter,p+1)
+  
+  for (i in 1:iter) {
+    err <- y-X%*%b
+    tau <-rgamma(1,a+(n+p)*0.5, g + 0.5*sum(err^2) + 0.5*t(b-b0)%*%Kinv%*%(b-b0) )
+    b <- rmvnorm(1,mean=P.mean,sigma=XXkii/tau)
+    b <-as.numeric(b)
+    #storing iterations for beta, tau,.
+    par[i,] <- c(b[1],b[2],1/tau)
+  }
+  
+  par <-par[-c(1:burnin),] #removing initial iterations
+  colnames(par)<-c("beta0","beta1","sigma2")  
+  return(par) 
+}
+```
+
+```{r}
+res <- Gibbsq2(iter=10000,X = X2,y=y,burnin=1000,tau_0=1,a=a,g=g,b0=b0,Kinv=Kinv)
+```
+
+
