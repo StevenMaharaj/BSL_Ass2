@@ -149,8 +149,6 @@ chain_stats
 PART C
 ```{r}
 # beta0
-
-
 plot(chain1[,1],type='l',ylab=expression(beta[0]))
 lines(chain1[,1],type='l',col=1,ylab=expression(beta[0]))
 lines(chain2[,1],type='l',col=2,ylab=expression(beta[0]))

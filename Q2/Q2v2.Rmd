@@ -28,6 +28,34 @@ library(ggplot2)
 library(tidyr)
 ```
 
+___
+PART A
+```{r}
+# Read the Data
+Hiron <- read.csv("Hiron.csv")
+HironHomo <- Hiron %>%filter(homc282y==1) %>% select(-idnum)
+HironWild <- Hiron %>%filter(homc282y==0) %>% select(-idnum)
+```
+
+```{r}
+#fit linear regression using lm
+
+model <- lm(logsf ~ time,data = HironHomo)
+model$coefficients
+intercept <-matrix(1,length(HironHomo$time),1)
+
+X <- cbind(intercept,HironHomo$time)
+XTX <- crossprod(X)  
+XTXinv <-solve(XTX)
+# (XTX)^-1
+XTXinv
+
+#Estimated error variance
+Sigma2<-sigma(model)^2
+Sigma2
+```
+
+
 ----
 PART B
 
@@ -127,8 +155,8 @@ a <-  (n1-p)*0.5
 s2 <- sum((HironHomo$logsf - X%*%b0)^2)/(n1-p)
 g <- (n1-p)*s2*0.5
 
- 
 ```
+
 ```{r}
 Gibbsq2 <- function(iter,X,y,burnin,tau_0,a,g,b0,Kinv){
   n  <-length(y) #no. observations
@@ -140,25 +168,131 @@ Gibbsq2 <- function(iter,X,y,burnin,tau_0,a,g,b0,Kinv){
   tau<- tau_0
   
   #storing results.
-  par <-matrix(0,iter,p+1)
+  par <-matrix(0,iter,p+3)
   
   for (i in 1:iter) {
+    
     err <- y-X%*%b
-    tau <-rgamma(1,a+(n+p)*0.5, g + 0.5*sum(err^2) + 0.5*t(b-b0)%*%Kinv%*%(b-b0) )
+    T_y <- sum(err^2)
+    
+    tau <-rgamma(1,a+(n+p)*0.5, g + 0.5*T_y + 0.5*t(b-b0)%*%Kinv%*%(b-b0) )
     b <- rmvnorm(1,mean=P.mean,sigma=XXkii/tau)
     b <-as.numeric(b)
-    #storing iterations for beta, tau,.
-    par[i,] <- c(b[1],b[2],1/tau)
+    
+    # posterior checking
+  Xb <- X%*%b
+  y_rep <- rnorm(n,mean = Xb,sd = sqrt(1/tau))
+  T_rep <- sum((y_rep-Xb)^2)
+  
+  #storing iterations for beta, tau,.
+  par[i,] <- c(b[1],b[2],1/tau,T_y,T_rep)
+    
+   
+  
   }
   
   par <-par[-c(1:burnin),] #removing initial iterations
-  colnames(par)<-c("beta0","beta1","sigma2")  
+  colnames(par)<-c("beta0","beta1","sigma2","T_y","T_rep")  
   return(par) 
 }
 ```
 
 ```{r}
-res <- Gibbsq2(iter=10000,X = X2,y=y,burnin=1000,tau_0=1,a=a,g=g,b0=b0,Kinv=Kinv)
+chain1 <- Gibbsq2(iter=10000,X = X2,y=y,burnin=1000,tau_0=1,a=a,g=g,b0=b0,Kinv=Kinv)
+chain2 <- Gibbsq2(iter=10000,X = X2,y=y,burnin=1000,tau_0=1,a=a,g=g,b0=b0,Kinv=Kinv)
+
+# Remove every second iteration to reduce auto - corrlation
+
+chain1t <- chain1[seq(1,dim(chain1)[1],by=2),]
+chain2t <- chain2[seq(1,dim(chain2)[1],by=2),]
 ```
 
 
+
+
+Reporting posterior means, standard deviations and 95 \% central credible intervals for $\beta_0, \beta_1, \sigma^2$ by combining results for the two chains.
+```{r}
+
+chain12t <- rbind(chain1t,chain2t)
+chain_stats <- data.frame(matrix(nrow = 3,ncol =4 ))
+para_names <- c('beta0','beta1','sigma2','lower_CI95','upper_CI95')
+for (i in 1:3) {
+  chain <-  chain12t[,i]
+  quat <- quantile(sort(chain), c(0.05, 0.975))
+  chain_stats[i,] <- c(mean(chain),sd(chain),quat)
+}
+names(chain_stats)<- c("posterior mean","std",'lower_CI95','upper_CI95')
+
+row.names(chain_stats) <- c('beta0','beta1','sigma2')
+
+# chain results
+chain_stats
+```
+Performing posterior predictive checking we have a p value
+```{r}
+chain12t_df <- data.frame(chain12t)
+pval <- prop.table(table(chain12t_df$T_y>chain12t_df$T_rep))["TRUE"]
+pval
+```
+The p value seem to be very low so the model does not seem plausible.
+
+____
+PART C
+```{r}
+# beta0
+plot(chain1t[,1],type='l',ylab=expression(beta[0]),col=1)
+lines(chain1t[,1],type='l',col=1,ylab=expression(beta[0]))
+lines(chain2t[,1],type='l',col=2,ylab=expression(beta[0]))
+legend('topright',legend=c('Chain 1','Chain 2'),col=1:2,lty=1,bty='n')
+```
+
+
+```{r}
+# beta1
+plot(chain1t[,2],type='l',ylab=expression(beta[1]))
+lines(chain1t[,2],type='l',col=1,ylab=expression(beta[1]))
+lines(chain2t[,2],type='l',col=2,ylab=expression(beta[1]))
+legend('topright',legend=c('Chain 1','Chain 2'),col=1:2,lty=1,bty='n') 
+```
+
+```{r}
+# sigma^2
+plot(chain1t[,3],type='l',ylab=expression(sigma^2))
+lines(chain1t[,3],type='l',col=1,ylab=expression(sigma^2))
+lines(chain2t[,3],type='l',col=2,ylab=expression(sigma^2))
+legend('topright',legend=c('Chain 1','Chain 2'),col=1:2,lty=1,bty='n') 
+```
+
+
+
+
+
+```{r}
+ml1<-as.mcmc.list(as.mcmc((chain1t[1:2250,])))
+ml2<-as.mcmc.list(as.mcmc((chain2t[1:2250,])))
+ml3<-as.mcmc.list(as.mcmc((chain1t[2250+1:2250,])))
+ml4<-as.mcmc.list(as.mcmc((chain2t[2250+1:2250,])))
+estml<-c(ml1,ml2,ml3,ml4)
+
+#Gelman-Rubin diagnostic.
+gelman.diag(estml)[[1]]
+```
+The graphical summaries ensure that chain converge to the same distribution. The Gelman-Rubin diagnostics for all parameters are very close to one so all thus chain mixed sufficiently.
+
+---
+
+PART D
+
+```{r}
+# Fit regresssion for all of the data
+
+full_model <- lm(logsf ~ time,data = Hiron)
+summary(full_model)
+```
+
+```{r}
+# Estimates
+full_model$coefficients
+# 95 % confidence intervals
+confint(full_model)
+```

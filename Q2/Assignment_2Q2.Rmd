@@ -22,6 +22,10 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 set.seed(695281) #Please change random seed to your student id number.
 library(dplyr)
+library(mvtnorm)
+library(coda)
+library(ggplot2)
+library(tidyr)
 ```
 
 ## Question Two (20 marks) 
@@ -78,7 +82,133 @@ sigma(model)^2
 
 b) Fit a Bayesian regression using a Gibbs sampler to **only the wildtype (\texttt{homc282y}=0) data**. Use the output from your answer in a) to define proper priors for $\bm \beta, \bm \tau$. For help, refer to lecture 13.  For the Gibbs sampler, run two chains for 10,000 iterations.  Discard the first 1000 iterations as burn-in and then remove every second remaining iteration to reduce auto-correlation. When storing results, convert $\tau$ back to $\sigma^2$.  When running the Gibbs sampler, incorporate posterior predictive checking, using the test statistic $T(y,\bm \beta) =\sum_{i=1}^n e_i^2$ and $T(y^\text{rep},\bm \beta) =\sum_{i=1}^n ({e^\text{rep}_i})^2$, where $e_i$ is the predicted residual for observation $i$ at simulation $j$ and $e^\text{rep}_i$ is the replicate residual for observation $i$ at simulation $j$. Report posterior means, standard deviations and 95 \% central credible intervals for $\beta_0, \beta_1, \sigma^2$ combining results for the two chains.
 
+Answer:
+For This Question we define proper priors for $\bm \beta, \bm \tau$ using the results from part a. That is using the following formula.
+
+$$p(\theta| \bm y) = \frac{p( \bm{y_2}|\theta) p(\theta| \bm{y_1})}{p( \bm{y_2}|\bm{y_1})}$$
+
+Using the posterior from the previous part we let the prior for this part be
+
+$$ p(\bm \beta|\tau) = \mathcal{N}(\hat{\bm \beta_1},(\bm X_1 \bm X_1)^{-1}/ \tau) $$
+$$ p(\bm \beta|\tau) = Ga(\frac{n_1 - p}{2},\frac{(n_1 - p)s^2}{2}) $$
+where the subscript 1 indicates the results are from group 1 (analysed in 2a) alone. Using the results from lecture 13, we drop the prior for $\tau_{\beta}$, and in all other places in the joint distribution, replace $\tau_{\beta}$ and $\tau_{e}$ with $\tau$.
+
+
+- $\bm K = (\bm X_1 \bm X_1)^{-1}$
+- $\bm \beta_0 = \hat{\bm \beta_1}$
+- $\alpha = \frac{n_1 - p}{2}$
+- $\gamma = \frac{(n_1 - p)s^2}{2}$
+
+Thus we get the following conditional posteriors
+
+$$ p\left(\tau | \mathbf{y}, \boldsymbol{\beta}, \boldsymbol{\beta}_{0}, \mathbf{K}\right)=\mathrm{Ga}\left(\alpha+\frac{n+p}{2}, \gamma+\frac{(\mathbf{y}-\mathbf{X} \boldsymbol{\beta})^{\prime}(\mathbf{y}-\mathbf{X} \boldsymbol{\beta})+\left(\boldsymbol{\beta}-\boldsymbol{\beta}_{0}\right)^{\prime} \mathbf{K}^{-1}\left(\boldsymbol{\beta}-\boldsymbol{\beta}_{0}\right)}{2}\right)$$
+
+$$p\left(\bm \beta | \mathbf{y}, \boldsymbol{\beta}_{0}, \mathbf{K},\tau\right)  =\mathcal{N}\left(\left(\mathbf{X}^{\prime} \mathbf{X}+\mathbf{K}^{-1}\right)^{-1}\left(\mathbf{X}^{\prime} \mathbf{y}+\mathbf{K}^{-1} \beta_{0}\right),\left(\mathbf{X}^{\prime} \mathbf{X}+\mathbf{K}^{-1}\right)^{-1} / \tau\right) $$
+
+Below we fit a Bayesian regression using a Gibbs sampler to **only the wildtype (\texttt{homc282y}=0) data**.
+
+
+
+
+```{r}
+# Define inputs for Gibbs sampler
+
+Kinv <- XTX
+X2 <- cbind(matrix(1,length(HironWild$time),1),HironWild$time)
+y <- HironWild$logsf
+b0 <- model$coefficients
+n1 <-dim(X)[1]
+p   <-dim(X2)[2]
+a <-  (n1-p)*0.5
+s2 <- sum((HironHomo$logsf - X%*%b0)^2)/(n1-p)
+g <- (n1-p)*s2*0.5
+
+```
+
+```{r}
+Gibbsq2 <- function(iter,X,y,burnin,tau_0,a,g,b0,Kinv){
+  n  <-length(y) #no. observations
+  p   <-dim(X)[2] #no of fixed effect predictors.
+  XXkii <- solve(crossprod(X) + Kinv)
+  P.mean <- XXkii%*%(t(X)%*%y + Kinv%*%b0)
+  
+  b <- rnorm(p,0,sd=1/sqrt(tau_0))
+  tau<- tau_0
+  
+  #storing results.
+  par <-matrix(0,iter,p+3)
+  
+  for (i in 1:iter) {
+    
+    err <- y-X%*%b
+    T_y <- sum(err^2)
+    
+    tau <-rgamma(1,a+(n+p)*0.5, g + 0.5*T_y + 0.5*t(b-b0)%*%Kinv%*%(b-b0) )
+    b <- rmvnorm(1,mean=P.mean,sigma=XXkii/tau)
+    b <-as.numeric(b)
+    
+    # posterior checking
+  Xb <- X%*%b
+  y_rep <- rnorm(n,mean = Xb,sd = sqrt(1/tau))
+  T_rep <- sum((y_rep-Xb)^2)
+  
+  #storing iterations for beta, tau,.
+  par[i,] <- c(b[1],b[2],1/tau,T_y,T_rep)
+    
+   
+  
+  }
+  
+  par <-par[-c(1:burnin),] #removing initial iterations
+  colnames(par)<-c("beta0","beta1","sigma2","T_y","T_rep")  
+  return(par) 
+}
+```
+
+```{r}
+chain1 <- Gibbsq2(iter=10000,X = X2,y=y,burnin=1000,tau_0=1,a=a,g=g,b0=b0,Kinv=Kinv)
+chain2 <- Gibbsq2(iter=10000,X = X2,y=y,burnin=1000,tau_0=1,a=a,g=g,b0=b0,Kinv=Kinv)
+
+# Remove every second iteration to reduce auto - corrlation
+
+chain1t <- chain1[seq(1,dim(chain1)[1],by=2),]
+chain2t <- chain2[seq(1,dim(chain2)[1],by=2),]
+```
+
+
+
+
+Reporting posterior means, standard deviations and 95 \% central credible intervals for $\beta_0, \beta_1, \sigma^2$ by combining results for the two chains.
+```{r}
+
+chain12t <- rbind(chain1t,chain2t)
+chain_stats <- data.frame(matrix(nrow = 3,ncol =4 ))
+para_names <- c('beta0','beta1','sigma2','lower_CI95','upper_CI95')
+for (i in 1:3) {
+  chain <-  chain12t[,i]
+  quat <- quantile(sort(chain), c(0.05, 0.975))
+  chain_stats[i,] <- c(mean(chain),sd(chain),quat)
+}
+names(chain_stats)<- c("posterior mean","std",'lower_CI95','upper_CI95')
+
+row.names(chain_stats) <- c('beta0','beta1','sigma2')
+
+# chain results
+chain_stats
+```
+Performing posterior predictive checking we have a p value
+```{r}
+chain12t_df <- data.frame(chain12t)
+pval <- prop.table(table(chain12t_df$T_y>chain12t_df$T_rep))["TRUE"]
+pval
+```
+The p value seems to be very low so the model does not seem plausible.
+
+
 c) Perform convergence checks for the chain obtained in b). Report both graphical summaries and Gelman-Rubin diagnostic results.  For the calculation of Gelman-Rubin diagnostics, you will need to install the R package \texttt{coda}. An example of processing chains for calculating Gelman-Rubin diagnostics is given below.
+
+
+
 
 \begin{footnotesize}
 \begin{verbatim}
@@ -98,6 +228,54 @@ c) Perform convergence checks for the chain obtained in b). Report both graphica
       gelman.diag(par.all)
 \end{verbatim}
 \end{footnotesize}
+
+
+
+
+Answer:
+
+PART C
+```{r}
+# beta0
+plot(chain1t[,1],type='l',ylab=expression(beta[0]),col=1)
+lines(chain1t[,1],type='l',col=1,ylab=expression(beta[0]))
+lines(chain2t[,1],type='l',col=2,ylab=expression(beta[0]))
+legend('topright',legend=c('Chain 1','Chain 2'),col=1:2,lty=1,bty='n')
+```
+
+
+```{r}
+# beta1
+plot(chain1t[,2],type='l',ylab=expression(beta[1]))
+lines(chain1t[,2],type='l',col=1,ylab=expression(beta[1]))
+lines(chain2t[,2],type='l',col=2,ylab=expression(beta[1]))
+legend('topright',legend=c('Chain 1','Chain 2'),col=1:2,lty=1,bty='n') 
+```
+
+```{r}
+# sigma^2
+plot(chain1t[,3],type='l',ylab=expression(sigma^2))
+lines(chain1t[,3],type='l',col=1,ylab=expression(sigma^2))
+lines(chain2t[,3],type='l',col=2,ylab=expression(sigma^2))
+legend('topright',legend=c('Chain 1','Chain 2'),col=1:2,lty=1,bty='n') 
+```
+
+
+
+
+
+```{r}
+ml1<-as.mcmc.list(as.mcmc((chain1t[1:2250,])))
+ml2<-as.mcmc.list(as.mcmc((chain2t[1:2250,])))
+ml3<-as.mcmc.list(as.mcmc((chain1t[2250+1:2250,])))
+ml4<-as.mcmc.list(as.mcmc((chain2t[2250+1:2250,])))
+estml<-c(ml1,ml2,ml3,ml4)
+
+#Gelman-Rubin diagnostic.
+gelman.diag(estml)[[1]]
+```
+The graphical summaries ensure that chain converge to the same distribution. The Gelman-Rubin diagnostics for all parameters are very close to one so all thus chains mixed sufficiently.
+
 
 d) Fit a standard linear regression,
 
