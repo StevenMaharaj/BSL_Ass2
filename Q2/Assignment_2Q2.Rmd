@@ -283,5 +283,24 @@ d) Fit a standard linear regression,
 
 to **all the data** using the \texttt{lm} function in R. Report $\hat{\bm \beta}$, and associated 95 \% confidence intervals. Comparing these results to the results from b), do you believe that sequential analysis gave the same results as fitting the regression on the full data.
 
+
+Answer:
+
+
+```{r}
+# Fit regresssion for all of the data
+
+full_model <- lm(logsf ~ time,data = Hiron)
+summary(full_model)
+```
+
+```{r}
+# Estimates
+full_model$coefficients
+# 95 % confidence intervals
+confint(full_model)
+```
+Comparing the results  from the full linear model (the cell above) and the sequential model from part b (chain_stats) we conclude that both models achived the same results (up to two decimal places).
+
 e) Report the results of posterior predictive checking requested in b). Do you believe the postulated model was plausible. If not, what do you think is a potential flaw in the postulated model.
 

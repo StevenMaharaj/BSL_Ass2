@@ -3,6 +3,8 @@ title: 'Steven Maharaj 695281 Assignment 2, Question 3 MAST90125: Bayesian Stati
 header-includes:
    - \usepackage{bm}
    - \usepackage{amsmath}
+   - \usepackage{amsfonts}
+   - \usepackage{amssymb}
 output: 
   pdf_document:
     number_sections: no
@@ -162,39 +164,28 @@ Part B
 
 Case $x \in (0,\infty)$
 ```{r}
-mu = 0.5
-sigma =  1 # sigma
-
-a <- 0
-b <- 10 # A number going to infinity
-n <- 5000
-
-invtn <- function(n,mu,sigma,a,b){
+rtn <- function(n,b,a,mu,Sigma){
   u <- runif(n)
-  return(qnorm(pnorm(a)+u*(pnorm(b) - pnorm(a)))*sigma + mu)
+  g <- pnorm((b-mu)/Sigma) - pnorm((a-mu)/Sigma)
+  x <-qnorm((g) * u + pnorm((a-mu)/Sigma))*Sigma + mu 
 }
 
-# Using my inverse cdf method
-x_empircal <- invtn(n,mu,sigma,a,b)
 
-# using the TruncatedNormal package 
-x_empircal <- rtnorm(n = n, mu = mu, lb = a, ub = b, method = "fast")
-empircal_den <- density(x_empircal)
 
-x <- seq(a,b,length.out = n)
-y <- dnorm(empircal_den$x,mean=mu,sd=sigma)/(pnorm(b,mean=mu,sd=sigma)-pnorm(a,mean=mu,sd=sigma))
+x<- rtn(n=100000,b=100,a=0,mu = 0.5,Sigma = 1)
 
-plot(empircal_den$x,empircal_den$y,
-main="Comparing densities for modified inverse CDF method",
-ylab="Density",
-xlab = "x",
-type="l",
-col="blue")
-lines(empircal_den$x, y, col="red")
-legend("topright",
-c("Empirical","True"),
-fill=c("blue","red")
-)
+mu = 0.5
+Sigma = 1
+b=100
+a=0
+
+
+x<-sort(x)
+true_den <- dnorm((x-mu)/Sigma)/(pnorm((b-mu)/Sigma) - pnorm((a-mu)/Sigma))
+
+plot(density(x),col = 1,main="X > 0")
+lines(x,true_den,col = 2,type = "l")
+legend('topright',legend=c('Simulated','True'),col=1:2,lty=1,bty='n')
 
 ```
 
@@ -202,38 +193,20 @@ fill=c("blue","red")
 
 Case $x \in (-\infty,0)$
 ```{r}
+x<- rtn(n=100000,b=0,a=-100,mu = 0.5,Sigma = 1)
+
 mu = 0.5
-sigma =  1 # sigma
-
-a <- -10
-b <- 0 # A number going to infinity
-n <- 5000
+Sigma = 1
+b=0
+a=-100
 
 
-# Using my inverse cdf method
-x_empircal <- invtn(n,mu,sigma,a,b)
+x<-sort(x)
+true_den <- dnorm((x-mu)/Sigma)/(pnorm((b-mu)/Sigma) - pnorm((a-mu)/Sigma))
 
-# using the TruncatedNormal package 
-x_empircal <- rtnorm(n = n, mu = mu, lb = a, ub = b, method = "fast")
-
-empircal_den <- density(x_empircal)
-
-x <- seq(a,b,length.out = n)
-
-y <- dnorm(empircal_den$x,mean=mu,sd=sigma)/(pnorm(b,mean=mu,sd=sigma)-pnorm(a,mean=mu,sd=sigma))
-
-plot(empircal_den$x,empircal_den$y,
-main="Comparing densities for modified inverse CDF method",
-ylab="Density",
-xlab = "x",
-type="l",
-col="blue")
-lines(empircal_den$x, y, col="red")
-legend("topleft",
-c("Empirical","True"),
-fill=c("blue","red")
-)
-
+plot(density(x),col = 1,main="X < 0")
+lines(x,true_den,col = 2,type = "l")
+legend('topleft',legend=c('Simulated','True'),col=1:2,lty=1,bty='n')
 ```
 
 

@@ -1,0 +1,72 @@
+---
+title: 'Steven Maharaj 695281 Assignment 2, Question 3 MAST90125: Bayesian Statistical Learning'
+header-includes:
+   - \usepackage{bm}
+   - \usepackage{amsmath}
+   - \usepackage{amsfonts}
+   - \usepackage{amssymb}
+output: 
+  pdf_document:
+    number_sections: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Due: Friday 20 September 2019**  
+\vspace{5 mm}
+
+**There are places in this assignment where R code will be required. Therefore set the random seed so assignment is reproducible.**
+
+```{r}
+set.seed(695281)  #Please change random seed to your student id number.
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(TruncatedNormal)
+```
+
+
+```{r}
+rtn <- function(n,b,a,mu,Sigma){
+  u <- runif(n)
+  g <- pnorm((b-mu)/Sigma) - pnorm((a-mu)/Sigma)
+  x <-qnorm((g) * u + pnorm((a-mu)/Sigma))*Sigma + mu 
+}
+
+```
+
+___
+PART C
+
+We mplement a Gibbs sampler to fit the same mixed model, but now with a probit link.
+
+Assumsing,
+
+ - $p(\bm \beta) \propto 1$
+ - $p(\bm u) = \mathcal{N}(\bm 0,\sigma^2_u \bm I)$
+ - $p(\tau_u) = Ga(\alpha_u,\gamma_u)$
+ 
+ It can be shown that we have the folling conditional posteriors
+ 
+ $$p\left(\tau_{u} | \cdot\right)=\mathrm{Ga}\left(\alpha_{u}+q / 2, \gamma_{u}+\mathbf{u}^{\prime} \mathbf{u} / 2\right)$$
+
+$$
+\left.p\left(\left(\begin{array}{c}{\beta} \\ {u}\end{array}\right) | \cdot\right)=\mathcal{N}\left(\begin{array}{cc}{X^{\prime} X} & {X^{\prime} Z} \\ {Z^{\prime} X} & {Z^{\prime} Z+\tau_{u}  \bm{I}^{-1}}\end{array}\right)^{-1}\left(\begin{array}{c}{X^{\prime} z} \\ {Z^{\prime} z}\end{array}\right),\left(\begin{array}{cc}{X^{\prime} X} & {X'Z} \\ {Z^{\prime} X} & {Z'Z+\tau_{u}  \bm{I}^{-1}}\end{array}\right)^{-1}\right)
+$$
+
+
+We define our inputs for the Gibbs Sampler
+
+
+```{r}
+
+```
+
+Construct a Gibbs sampler
+```{r}
+
+```
+
+

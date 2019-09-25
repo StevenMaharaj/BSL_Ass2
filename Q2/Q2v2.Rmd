@@ -296,3 +296,16 @@ full_model$coefficients
 # 95 % confidence intervals
 confint(full_model)
 ```
+Comparing the results  from the full linear model model (the cell above ) and the sequential analysis from part b (chain_stats) we conclude the both models achived the same results (up to two decimal places.)
+
+___
+
+PART E
+
+Performing posterior predictive checking we have the following p-value
+```{r}
+chain12t_df <- data.frame(chain12t)
+pval <- prop.table(table(chain12t_df$T_y>chain12t_df$T_rep))["TRUE"]
+pval
+```
+The p value seems to be very low so the model does not seem plausible.
