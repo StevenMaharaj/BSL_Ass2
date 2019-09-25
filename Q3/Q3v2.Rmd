@@ -25,6 +25,7 @@ library(dplyr)
 library(ggplot2)
 library(tidyr)
 library(TruncatedNormal)
+library(mvtnorm)
 ```
 
 
@@ -61,12 +62,62 @@ We define our inputs for the Gibbs Sampler
 
 
 ```{r}
+#Step one: Importing data,  constructing design matrices and calculating matrix dimensions.
+dataX= read.csv("Contraceptionsubset.csv",header=TRUE)
+n<-dim(dataX)[1]
+Z    = table(1:n,dataX$district)     #incidence matrix for district
+Q    = dim(Z)[2]
+D1   = table(1:n,dataX$livch) #Dummy indicator for living children
+D2   = table(1:n,dataX$urban) #Dummy indicator for urban status
 
+#fixed effect design matrix 
+X    = cbind(rep(1,n),dataX$age,D1[,-1],D2[,-1])
+P    = dim(X)[2]
+y    = rep(0,n)
+y[dataX$use %in% 'Y'] = 1
+a <- 0.001
+g <- 0.001
 ```
 
 Construct a Gibbs sampler
 ```{r}
-
+Gibbsq3 <- function(iter,Z,X,y,burnin,tauu_0,a,g){
+  q    = dim(Z)[2]
+  p    = dim(X)[2]
+  
+  W<-cbind(X,Z)            #for the joint conditional posterior for b,u
+  WTW <-crossprod(W)
+  I0 <- diag(p+q)
+  diag(I0)[1:p] <- 0
+  
+  #starting values.
+  t_u <- tauu_0
+  u   <-rnorm(q,0,sd=1/sqrt(t_u))
+  
+  uTu <- crossprod(u)
+  
+  #storing results.
+  par <-matrix(0,iter,p+q+1)  
+  
+  for (i in 1:iter) {
+    Prec <-WTW + t_u*I0
+    
+    t_u <- rgamma(1,a + q*0.5,g + uTu*0.5)
+    z <- rtn(n=length(y),b=100,a=0,mu = 0.5,Sigma = 1)*(y==1) + rtn(n=length(y),b=0,a=-100,mu = 0.5,Sigma = 1)*(y==0) 
+    P.mean <- solve(Prec)%*%crossprod(W,z)
+    P.var  <-solve(Prec)
+    res <- rmvnorm(1,P.mean,P.var)
+    b <- res[1:p]
+    u <- res[p+1:q]
+    par[i,]<-c(b,u,1/t_u)
+  }
+par <-par[-c(1:burnin),] #removing initial iterations
+colnames(par)<-c(paste('beta',1:p,sep=''),paste('u',1:q,sep=''),"sigma2_u")  
+ return(par)
+}
 ```
 
+```{r}
+res <- Gibbsq3(iter=2000,Z=Z,X=X,y=y,burnin=1000,tauu_0 = 1,a=a,g=g)
+```
 

@@ -25,6 +25,7 @@ library(dplyr)
 library(ggplot2)
 library(tidyr)
 library(TruncatedNormal)
+library(mvtnorm)
 ```
 
 ## Question Three (18 marks)
@@ -63,7 +64,6 @@ X    = cbind(rep(1,n),dataX$age,D1[,-1],D2[,-1])
 P    = dim(X)[2]
 y    = rep(0,n)
 y[dataX$use %in% 'Y'] = 1
-
 ```
 
 
