@@ -26,6 +26,7 @@ library(ggplot2)
 library(tidyr)
 library(TruncatedNormal)
 library(mvtnorm)
+library(coda)
 ```
 
 ## Question Three (18 marks)

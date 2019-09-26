@@ -26,6 +26,7 @@ library(ggplot2)
 library(tidyr)
 library(TruncatedNormal)
 library(mvtnorm)
+library(coda)
 ```
 
 
@@ -75,8 +76,9 @@ X    = cbind(rep(1,n),dataX$age,D1[,-1],D2[,-1])
 P    = dim(X)[2]
 y    = rep(0,n)
 y[dataX$use %in% 'Y'] = 1
-a <- 0.001
-g <- 0.001
+a <- 0.01
+g <- 0.01
+# iter =2000
 ```
 
 Construct a Gibbs sampler
@@ -93,17 +95,17 @@ Gibbsq3 <- function(iter,Z,X,y,burnin,tauu_0,a,g){
   #starting values.
   t_u <- tauu_0
   u   <-rnorm(q,0,sd=1/sqrt(t_u))
-  
-  uTu <- crossprod(u)
+  b   <-rnorm(p,0,sd=1/sqrt(t_u))
   
   #storing results.
   par <-matrix(0,iter,p+q+1)  
   
   for (i in 1:iter) {
     Prec <-WTW + t_u*I0
-    
-    t_u <- rgamma(1,a + q*0.5,g + uTu*0.5)
-    z <- rtn(n=length(y),b=100,a=0,mu = 0.5,Sigma = 1)*(y==1) + rtn(n=length(y),b=0,a=-100,mu = 0.5,Sigma = 1)*(y==0) 
+    t_u <- rgamma(1,a + q*0.5,g + crossprod(u)*0.5)
+    z <- rtn(n=length(y),b=100,a=0,mu = crossprod(t(X),b)+crossprod(t(Z),u),Sigma = 1)*(y==1) + rtn(n=length(y),b=0,a=-100,mu = crossprod(t(X),b)+crossprod(t(Z),u),Sigma = 1)*(y==0) 
+    z[is.nan(z)] = 0
+    z[is.infinite(z)] = 0
     P.mean <- solve(Prec)%*%crossprod(W,z)
     P.var  <-solve(Prec)
     res <- rmvnorm(1,P.mean,P.var)
@@ -118,6 +120,80 @@ colnames(par)<-c(paste('beta',1:p,sep=''),paste('u',1:q,sep=''),"sigma2_u")
 ```
 
 ```{r}
-res <- Gibbsq3(iter=2000,Z=Z,X=X,y=y,burnin=1000,tauu_0 = 1,a=a,g=g)
+
+chain1 <- Gibbsq3(iter=2000,Z=Z,X=X,y=y,burnin=1000,tauu_0 = 1,a=a,g=g)
+chain2 <- Gibbsq3(iter=2000,Z=Z,X=X,y=y,burnin=1000,tauu_0 = 0.5,a=a,g=g)
+chain3 <- Gibbsq3(iter=2000,Z=Z,X=X,y=y,burnin=1000,tauu_0 = 2,a=a,g=g)
+chain4 <- Gibbsq3(iter=2000,Z=Z,X=X,y=y,burnin=1000,tauu_0 = 5,a=a,g=g)
+
+ 
+
+ml1<-as.mcmc.list(as.mcmc((chain1[1:500,])))
+ml2<-as.mcmc.list(as.mcmc((chain2[1:500,])))
+ml3<-as.mcmc.list(as.mcmc((chain3[1:500,])))
+ml4<-as.mcmc.list(as.mcmc((chain4[1:500,])))
+ml5<-as.mcmc.list(as.mcmc((chain1[500+1:500,])))
+ml6<-as.mcmc.list(as.mcmc((chain2[500+1:500,])))
+ml7<-as.mcmc.list(as.mcmc((chain4[500+1:500,])))
+ml8<-as.mcmc.list(as.mcmc((chain4[500+1:500,])))
+estml<-c(ml1,ml2,ml3,ml4,ml5,ml6,ml7,ml8)
 ```
 
+
+
+```{r}
+#Gelman-Rubin diagnostic.
+gelman.diag(estml)[[1]]
+
+#effective sample size.
+effectiveSize(estml)
+```
+
+The Gelman-Rubin diagnostic showns most parameters have converged except beta6 and sigma2_u as there Rhat value are sufficiently close to one.
+```{r}
+#Reporting posterior means and credible intervals.
+#Means
+colMeans(rbind(chain1,chain2,chain3,chain4)) 
+#95 % central Credible interval
+apply(rbind(chain1,chain2,chain3,chain4) ,2, FUN =function(x) quantile(x,c(0.025,0.975) ))
+```
+
+
+
+
+
+
+```{r}
+# beta
+for(i in 1:6){
+  
+  plot(chain1[,i],type='l',ylab=paste("beta",as.character(i)),col=1)
+  lines(chain1[,i],type='l',col=1,ylab=expression(beta[i]))
+  lines(chain2[,i],type='l',col=2,ylab=expression(beta[i]))
+  lines(chain3[,i],type='l',col=3,ylab=expression(beta[i]))
+  lines(chain4[,i],type='l',col=4,ylab=expression(beta[i]))
+  legend('bottomright',legend=c('Chain 1','Chain 2','Chain 3','Chain 4'),col=1:4,lty=1,bty='n')}
+```
+
+
+```{r}
+# u
+for(i in 1:5){
+  
+  plot(chain1[,i+6],type='l',ylab=paste("u",as.character(i)),col=1)
+  lines(chain1[,i+6],type='l',col=1)
+  lines(chain2[,i+6],type='l',col=2)
+  lines(chain3[,i+6],type='l',col=3)
+  lines(chain4[,i+6],type='l',col=4)
+  legend('topright',legend=c('Chain 1','Chain 2','Chain 3','Chain 4'),col=1:4,lty=1,bty='n')}
+```
+
+```{r}
+# u
+plot(chain1[,12],type='l',ylab=paste("sigma2_u"),col=1)
+lines(chain1[,12],type='l',col=1)
+lines(chain2[,12],type='l',col=2)
+lines(chain3[,12],type='l',col=3)
+lines(chain4[,12],type='l',col=4)
+legend('topright',legend=c('Chain 1','Chain 2','Chain 3','Chain 4'),col=1:4,lty=1,bty='n')
+```
