@@ -23,8 +23,6 @@ knitr::opts_chunk$set(echo = TRUE)
 set.seed(695281)  #Please change random seed to your student id number.
 library(dplyr)
 library(ggplot2)
-library(tidyr)
-library(TruncatedNormal)
 library(mvtnorm)
 library(coda)
 ```
@@ -213,9 +211,229 @@ legend('topleft',legend=c('Simulated','True'),col=1:2,lty=1,bty='n')
 
 c) Implement a Gibbs sampler to fit the same mixed model as fitted in Stan in a), but now with a probit link. As before, fit 4 chains, each running for 2000 iterations, with the first 1000 iterations discarded as burn-in. Perform graphical convergence checks and Gelman-Rubin diagnostics. Report posterior means, standard deviations and 95 \% central credible intervals for $\sigma, \bm \beta, {\bf u}$ by combining chains. 
 
-d) For the co-efficients $\bm \beta$, $\bf u$, calculate the mean of the ratio of the posterior means $\bm \beta_{i,\text{logit}}/\bm \beta_{i,\text{probit}}, {\bf u}_{i,\text{logit}}/{\bf u}_{i,\text{probit}}$ obtained when fitting the logistic mixed model and the probit mixed model. To do this, you will need to apply the \texttt{extract} function to the stan model object. Once calculated, multiply the iterations obtained assuming a probit link by this constant and compare to the iterations obtained assuming a logit link.   
+
+
+
+We implement a Gibbs sampler to fit the same mixed model, but now with a probit link.
+
+Assumsing,
+
+ - $p(\bm \beta) \propto 1$
+ - $p(\bm u) = \mathcal{N}(\bm 0,\sigma^2_u \bm I)$
+ - $p(\tau_u) = Ga(\alpha_u,\gamma_u)$
+ 
+ It can be shown that we have the folling conditional posteriors
+ 
+ $$p\left(\tau_{u} | \cdot\right)=\mathrm{Ga}\left(\alpha_{u}+q / 2, \gamma_{u}+\mathbf{u}^{\prime} \mathbf{u} / 2\right)$$
+
+$$
+\left.p\left(\left(\begin{array}{c}{\beta} \\ {u}\end{array}\right) | \cdot\right)=\mathcal{N}\left(\begin{array}{cc}{X^{\prime} X} & {X^{\prime} Z} \\ {Z^{\prime} X} & {Z^{\prime} Z+\tau_{u}  \bm{I}^{-1}}\end{array}\right)^{-1}\left(\begin{array}{c}{X^{\prime} z} \\ {Z^{\prime} z}\end{array}\right),\left(\begin{array}{cc}{X^{\prime} X} & {X'Z} \\ {Z^{\prime} X} & {Z'Z+\tau_{u}  \bm{I}^{-1}}\end{array}\right)^{-1}\right)
+$$
+
+
+We define our inputs for the Gibbs Sampler
+
+
+```{r}
+#Step one: Importing data,  constructing design matrices and calculating matrix dimensions.
+dataX= read.csv("Contraceptionsubset.csv",header=TRUE)
+n<-dim(dataX)[1]
+Z    = table(1:n,dataX$district)     #incidence matrix for district
+Q    = dim(Z)[2]
+D1   = table(1:n,dataX$livch) #Dummy indicator for living children
+D2   = table(1:n,dataX$urban) #Dummy indicator for urban status
+
+#fixed effect design matrix 
+X    = cbind(rep(1,n),dataX$age,D1[,-1],D2[,-1])
+P    = dim(X)[2]
+y    = rep(0,n)
+y[dataX$use %in% 'Y'] = 1
+a <- 0.01
+g <- 0.01
+# iter =2000
+```
+
+Construct a Gibbs sampler
+```{r}
+Gibbsq3 <- function(iter,Z,X,y,burnin,tauu_0,a,g){
+  q    = dim(Z)[2]
+  p    = dim(X)[2]
+  
+  W<-cbind(X,Z)            #for the joint conditional posterior for b,u
+  WTW <-crossprod(W)
+  I0 <- diag(p+q)
+  diag(I0)[1:p] <- 0
+  
+  #starting values.
+  t_u <- tauu_0
+  u   <-rnorm(q,0,sd=1/sqrt(t_u))
+  b   <-rnorm(p,0,sd=1/sqrt(t_u))
+  
+  #storing results.
+  par <-matrix(0,iter,p+q+1)  
+  
+  for (i in 1:iter) {
+    Prec <-WTW + t_u*I0
+    t_u <- rgamma(1,a + q*0.5,g + crossprod(u)*0.5)
+    z <- rtn(n=length(y),b=100,a=0,mu = crossprod(t(X),b)+crossprod(t(Z),u),Sigma = 1)*(y==1) + rtn(n=length(y),b=0,a=-100,mu = crossprod(t(X),b)+crossprod(t(Z),u),Sigma = 1)*(y==0) 
+    z[is.nan(z)] = 0
+    z[is.infinite(z)] = 0
+    P.mean <- solve(Prec)%*%crossprod(W,z)
+    P.var  <-solve(Prec)
+    res <- rmvnorm(1,P.mean,P.var)
+    b <- res[1:p]
+    u <- res[p+1:q]
+    par[i,]<-c(b,u,1/t_u)
+  }
+par <-par[-c(1:burnin),] #removing initial iterations
+colnames(par)<-c(paste('beta',1:p,sep=''),paste('u',1:q,sep=''),"sigma2_u")  
+ return(par)
+}
+```
+
+```{r}
+
+chain1 <- Gibbsq3(iter=2000,Z=Z,X=X,y=y,burnin=1000,tauu_0 = 1,a=a,g=g)
+chain2 <- Gibbsq3(iter=2000,Z=Z,X=X,y=y,burnin=1000,tauu_0 = 0.5,a=a,g=g)
+chain3 <- Gibbsq3(iter=2000,Z=Z,X=X,y=y,burnin=1000,tauu_0 = 2,a=a,g=g)
+chain4 <- Gibbsq3(iter=2000,Z=Z,X=X,y=y,burnin=1000,tauu_0 = 5,a=a,g=g)
+
+ 
+
+ml1<-as.mcmc.list(as.mcmc((chain1[1:500,])))
+ml2<-as.mcmc.list(as.mcmc((chain2[1:500,])))
+ml3<-as.mcmc.list(as.mcmc((chain3[1:500,])))
+ml4<-as.mcmc.list(as.mcmc((chain4[1:500,])))
+ml5<-as.mcmc.list(as.mcmc((chain1[500+1:500,])))
+ml6<-as.mcmc.list(as.mcmc((chain2[500+1:500,])))
+ml7<-as.mcmc.list(as.mcmc((chain4[500+1:500,])))
+ml8<-as.mcmc.list(as.mcmc((chain4[500+1:500,])))
+estml<-c(ml1,ml2,ml3,ml4,ml5,ml6,ml7,ml8)
+```
+
+
+
+```{r}
+#Gelman-Rubin diagnostic.
+gelman.diag(estml)[[1]]
+
+#effective sample size.
+effectiveSize(estml)
+```
+
+The Gelman-Rubin diagnostic showns most parameters have converged except sigma2_u as there Rhat value are sufficiently close to one.
+```{r}
+#Reporting posterior means and credible intervals.
+#Means
+colMeans(rbind(chain1,chain2,chain3,chain4)) 
+#95 % central Credible interval
+apply(rbind(chain1,chain2,chain3,chain4) ,2, FUN =function(x) quantile(x,c(0.025,0.975) ))
+```
+
+
+
+
+
+
+```{r}
+# beta
+for(i in 1:6){
+  
+  plot(chain1[,i],type='l',ylab=paste("beta",as.character(i)),col=1)
+  lines(chain1[,i],type='l',col=1,ylab=expression(beta[i]))
+  lines(chain2[,i],type='l',col=2,ylab=expression(beta[i]))
+  lines(chain3[,i],type='l',col=3,ylab=expression(beta[i]))
+  lines(chain4[,i],type='l',col=4,ylab=expression(beta[i]))
+  legend('bottomright',legend=c('Chain 1','Chain 2','Chain 3','Chain 4'),col=1:4,lty=1,bty='n')}
+```
+
+```{r}
+# u
+for(i in 1:5){
+  
+  plot(chain1[,i+6],type='l',ylab=paste("u",as.character(i)),col=1)
+  lines(chain1[,i+6],type='l',col=1)
+  lines(chain2[,i+6],type='l',col=2)
+  lines(chain3[,i+6],type='l',col=3)
+  lines(chain4[,i+6],type='l',col=4)
+  legend('topright',legend=c('Chain 1','Chain 2','Chain 3','Chain 4'),col=1:4,lty=1,bty='n')}
+```
+
+```{r}
+# u
+plot(chain1[,12],type='l',ylab=paste("sigma2_u"),col=1)
+lines(chain1[,12],type='l',col=1)
+lines(chain2[,12],type='l',col=2)
+lines(chain3[,12],type='l',col=3)
+lines(chain4[,12],type='l',col=4)
+legend('topright',legend=c('Chain 1','Chain 2','Chain 3','Chain 4'),col=1:4,lty=1,bty='n')
+```
+
+
+d) For the co-efficients $\bm \beta$, $\bf u$, calculate the mean of the ratio of the posterior means $\bm \beta_{i,\text{logit}}/\bm \beta_{i,\text{probit}}, {\bf u}_{i,\text{logit}}/{\bf u}_{i,\text{probit}}$ obtained when fitting the logistic mixed model and the probit mixed model. To do this, you will need to apply the \texttt{extract} function to the stan model object. Once calculated, multiply the iterations obtained assuming a probit link by this constant and compare to the iterations obtained assuming a logit link.  
+
+
+Answer:
+PART D 
+```{r}
+means_prob <- colMeans(rbind(chain1,chain2,chain3,chain4)) 
+log_variables <- extract(logistic.mm)
+means_log <- c(colMeans(log_variables$beta),colMeans(log_variables$u),mean(log_variables$sigma))
+ratio <- means_log/means_prob
+ratio
+```
+```{r}
+# chains multiplied by the ratio
+
+chain1s <- chain1*ratio
+chain2s <- chain2*ratio
+chain3s <- chain3*ratio
+chain4s <- chain4*ratio
+
+
+ml1s<-as.mcmc.list(as.mcmc((chain1[1:500,])))
+ml2s<-as.mcmc.list(as.mcmc((chain2[1:500,])))
+ml3s<-as.mcmc.list(as.mcmc((chain3[1:500,])))
+ml4s<-as.mcmc.list(as.mcmc((chain4[1:500,])))
+ml5s<-as.mcmc.list(as.mcmc((chain1[500+1:500,])))
+ml6s<-as.mcmc.list(as.mcmc((chain2[500+1:500,])))
+ml7s<-as.mcmc.list(as.mcmc((chain4[500+1:500,])))
+ml8s<-as.mcmc.list(as.mcmc((chain4[500+1:500,])))
+estmls<-c(ml1s,ml2s,ml3s,ml4s,ml5s,ml6s,ml7s,ml8s)
+```
+
+```{r}
+gelman.diag(estml)[[1]]
+
+#effective sample size.
+effectiveSize(estmls)
+```
+
+```{r}
+#Reporting posterior means and credible intervals.
+#Means
+colMeans(rbind(chain1s,chain2s,chain3s,chain4s)) 
+#95 % central Credible interval
+apply(rbind(chain1s,chain2s,chain3s,chain4s) ,2, FUN =function(x) quantile(x,c(0.025,0.975) ))
+```
+
+From the above report we can see that the posterior means of the probit link model multiplied by the ratio of posterior means are much closer to the log link model than the probit model alone. Also we see that all parameters converged except for sigma2_u.
+
+
 
 e) The logistic link can be written in the same way as the probit link, but instead of $e_i\sim \mathcal{N}(0,1)$, the error term is $e_i \sim \text{Logistic}(0,1)$. By evaluating the standard normal and logistic inverse cdfs and superimposing the line $y = mx$ where $m$ is the posterior ratio, do you think the results in d) were surprising.
+
+```{r}
+p <- seq(from = 0,to = 1,length.out = 2000)
+xn <- qnorm(p)
+xl <- qlogis(p)
+
+plot(xn,xl,col=1,xlab="normal quantiles",ylab="Logistic quantiles")
+lines(xn,mean(ratio)*xn,type='l',col=2)
+legend('topleft',legend=c('CDFs','y =mx'),col=1:2,lty=1,bty='n')
+```
+
+From the above q-q plot we see that the logistic link is the normal link scaled by the posterior ratio (however the logistic link has slightly heavier tails). Hence once the iterations were scaled it was not surprising to see the posterior means for both models get closer to each other.
 
 
 

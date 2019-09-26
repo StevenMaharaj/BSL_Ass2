@@ -23,8 +23,8 @@ knitr::opts_chunk$set(echo = TRUE)
 set.seed(695281)  #Please change random seed to your student id number.
 library(dplyr)
 library(ggplot2)
-library(tidyr)
-library(TruncatedNormal)
+# library(TruncatedNormal)
+library(rstan)
 library(mvtnorm)
 library(coda)
 ```
@@ -42,7 +42,7 @@ rtn <- function(n,b,a,mu,Sigma){
 ___
 PART C
 
-We mplement a Gibbs sampler to fit the same mixed model, but now with a probit link.
+We implement a Gibbs sampler to fit the same mixed model, but now with a probit link.
 
 Assumsing,
 
@@ -149,7 +149,7 @@ gelman.diag(estml)[[1]]
 effectiveSize(estml)
 ```
 
-The Gelman-Rubin diagnostic showns most parameters have converged except beta6 and sigma2_u as there Rhat value are sufficiently close to one.
+The Gelman-Rubin diagnostic showns most parameters have converged except sigma2_u as there Rhat value are sufficiently close to one.
 ```{r}
 #Reporting posterior means and credible intervals.
 #Means
@@ -197,3 +197,64 @@ lines(chain3[,12],type='l',col=3)
 lines(chain4[,12],type='l',col=4)
 legend('topright',legend=c('Chain 1','Chain 2','Chain 3','Chain 4'),col=1:4,lty=1,bty='n')
 ```
+
+
+___
+PART D 
+```{r}
+means_prob <- colMeans(rbind(chain1,chain2,chain3,chain4)) 
+log_variables <- extract(logistic.mm)
+means_log <- c(colMeans(log_variables$beta),colMeans(log_variables$u),mean(log_variables$sigma))
+ratio <- means_log/means_prob
+ratio
+```
+```{r}
+# chains multiplied by the ratio
+
+chain1s <- chain1*ratio
+chain2s <- chain2*ratio
+chain3s <- chain3*ratio
+chain4s <- chain4*ratio
+
+
+ml1s<-as.mcmc.list(as.mcmc((chain1[1:500,])))
+ml2s<-as.mcmc.list(as.mcmc((chain2[1:500,])))
+ml3s<-as.mcmc.list(as.mcmc((chain3[1:500,])))
+ml4s<-as.mcmc.list(as.mcmc((chain4[1:500,])))
+ml5s<-as.mcmc.list(as.mcmc((chain1[500+1:500,])))
+ml6s<-as.mcmc.list(as.mcmc((chain2[500+1:500,])))
+ml7s<-as.mcmc.list(as.mcmc((chain4[500+1:500,])))
+ml8s<-as.mcmc.list(as.mcmc((chain4[500+1:500,])))
+estmls<-c(ml1s,ml2s,ml3s,ml4s,ml5s,ml6s,ml7s,ml8s)
+```
+
+```{r}
+gelman.diag(estml)[[1]]
+
+#effective sample size.
+effectiveSize(estmls)
+```
+
+```{r}
+#Reporting posterior means and credible intervals.
+#Means
+colMeans(rbind(chain1s,chain2s,chain3s,chain4s)) 
+#95 % central Credible interval
+apply(rbind(chain1s,chain2s,chain3s,chain4s) ,2, FUN =function(x) quantile(x,c(0.025,0.975) ))
+```
+
+From the above report we can see that the posterior means of the probit link model multiplied by the ratio of posterior means are much closer to the log link model than the probit model alone. Also we see that all parameters converged except for sigma2_u.
+
+
+___
+```{r}
+p <- seq(from = 0,to = 1,length.out = 2000)
+xn <- qnorm(p)
+xl <- qlogis(p)
+
+plot(xn,xl,col=1,xlab="normal quantiles",ylab="Logistic quantiles")
+lines(xn,mean(ratio)*xn,type='l',col=2)
+legend('topleft',legend=c('CDFs','y =mx'),col=1:2,lty=1,bty='n')
+```
+
+From the above q-q plot we see that the logistic link is the normal link scaled by the posterior ratio (however the logistic link has slightly heavier tails). Hence once the iterations were scaled it was not surprising to see the posterior means for both model get closer to each other.  
