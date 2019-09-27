@@ -72,3 +72,151 @@ c) Fit a Bayesian Poisson regression using Metropolis sampling. Assume flat prio
 \item The effective sample size for each chain. 
 \item What do you think is the best choice for $c$. Does this match the results stated in class on efficiency and optimal acceptance rate?
 \end{itemize}
+
+
+Answer: 
+
+
+```{r}
+# Extracting the design matrix
+X <- model.matrix(mod)
+# betaest<-modest$coef
+sigma  <-vcov(mod)
+y <- WOOL$breaks
+p <-dim(X)[2]   #number of parameters
+```
+
+
+
+```{r}
+#Part one: function for performing Metropolis sampling for poisson regression normal random walk.
+#Inputs:
+#y: vector of responses
+#n: vector (or scalar) of trial sizes. 
+#X: predictor matrix including intercept.
+#c: rescaling for variance-covariance matrix, scalar J(lambda*|lambda(t-1)) = N(lambda(t-1), c^2*Sigma)
+#Sigma is variance covariance matrix for parameters in J()
+#iter: number of iterations
+#burnin: number of initial iterations to throw out.
+Metropolis.fn<-function(y,X,c,Sigma,iter,burnin){ 
+p <-dim(X)[2]   #number of parameters
+library(mvtnorm)
+beta0<-rnorm(p) #initial values.
+beta.sim<-matrix(0,iter,p) #matrix to store iterations
+beta.sim[1,]<-beta0   
+for(i in 1:(iter-1)){
+beta.cand <-rmvnorm(1,mean=beta.sim[i,],sigma=c^2*Sigma) #draw candidate (jointly)
+beta.cand <-as.numeric(beta.cand)  
+xbc        <-X%*%beta.cand      
+lambda.c        <-exp(xbc)   #Calculating probability of success for candidates.
+xb         <-X%*%beta.sim[i,]
+lambda.b        <-exp(xb)     #Calculating probability of success for lambda(t-1). 
+#difference of log joint distributions.
+r<-sum( dpois(y,lambda.c,log=TRUE)-dpois(y,lambda.b ,log=TRUE) )
+#Draw an indicator whether to accept/reject candidate
+ind<-rbinom(1,1,exp( min(c(r,0)) ) )
+beta.sim[i+1,]<- ind*beta.cand + (1-ind)*beta.sim[i,]
+}
+
+#Removing the iterations in burnin phase
+results<-data.frame(beta.sim[-c(1:burnin),])
+names(results)<-c('beta0','beta1','beta2','beta3') #column names
+return(results)
+}
+```
+
+```{r}
+library(coda)
+```
+
+```{r}
+# c =1.6/sqrt(p)
+par(mar=c(2,2,2,2))
+results16_1 <- Metropolis.fn(y,X,c=1.6/sqrt(p),Sigma = sigma,iter=10000,burnin =5000)
+results16_2 <- Metropolis.fn(y,X,c=1.6/sqrt(p),Sigma = sigma,iter=10000,burnin =5000)
+results16_3 <- Metropolis.fn(y,X,c=1.6/sqrt(p),Sigma = sigma,iter=10000,burnin =5000)
+c16_1 <- mcmc(results16_1[c('beta0','beta1','beta2','beta3')])
+c16_2 <- mcmc(results16_2[c('beta0','beta1','beta2','beta3')])
+c16_3 <- mcmc(results16_3[c('beta0','beta1','beta2','beta3')])
+c16 <- mcmc.list(c16_1,c16_2,c16_3)
+plot(c16)
+# Acceptance Rate 
+1 - rejectionRate(c16)
+# Gelman and Rubin diagnostic
+gelman.diag(c16)[[1]]
+# Effective sample size
+effectiveSize(c16)
+```
+```{r}
+# c = 2.4/sqrt(p)
+par(mar=c(2,2,2,2))
+results24_1 <- Metropolis.fn(y,X,c=2.4/sqrt(p),Sigma = sigma,iter=10000,burnin =5000)
+results24_2 <- Metropolis.fn(y,X,c=2.4/sqrt(p),Sigma = sigma,iter=10000,burnin =5000)
+results24_3 <- Metropolis.fn(y,X,c=2.4/sqrt(p),Sigma = sigma,iter=10000,burnin =5000)
+c24_1 <- mcmc(results24_1[c('beta0','beta1','beta2','beta3')])
+c24_2 <- mcmc(results24_2[c('beta0','beta1','beta2','beta3')])
+c24_3 <- mcmc(results24_3[c('beta0','beta1','beta2','beta3')])
+c24 <- mcmc.list(c24_1,c24_2,c24_3)
+plot(c24)
+# Acceptance Rate 
+1 - rejectionRate(c24)
+# Gelman and Rubin diagnostic
+gelman.diag(c24)[[1]]
+# Effective sample size
+effectiveSize(c24)
+```
+```{r}
+# c = 3.2/sqrt(p)
+par(mar=c(2,2,2,2))
+results32_1 <- Metropolis.fn(y,X,c=3.2/sqrt(p),Sigma = sigma,iter=10000,burnin =5000)
+results32_2 <- Metropolis.fn(y,X,c=3.2/sqrt(p),Sigma = sigma,iter=10000,burnin =5000)
+results32_3 <- Metropolis.fn(y,X,c=3.2/sqrt(p),Sigma = sigma,iter=10000,burnin =5000)
+c32_1 <- mcmc(results32_1[c('beta0','beta1','beta2','beta3')])
+c32_2 <- mcmc(results32_2[c('beta0','beta1','beta2','beta3')])
+c32_3 <- mcmc(results32_3[c('beta0','beta1','beta2','beta3')])
+c32 <- mcmc.list(c32_1,c32_2,c32_3)
+plot(c32)
+# Acceptance Rate 
+1 - rejectionRate(c32)
+# Gelman and Rubin diagnostic
+gelman.diag(c32)[[1]]
+# Effective sample size
+effectiveSize(c32)
+```
+
+```{r}
+# comments 
+AcceptanceRate <- c(1 - rejectionRate(c16),1 - rejectionRate(c24),1 - rejectionRate(c32))
+EffectiveSampleSize <- c(effectiveSize(c16),effectiveSize(c24),effectiveSize(c32))
+rown <- c("c=1.6 beta0","c=1.6 beta1","c=1.6 beta2","c=1.6 beta3",
+          "c=2.4 beta0","c=2.4 beta1","c=2.4 beta2","c=2.4 beta3",
+          "c=3.2 beta0","c=3.2 beta1","c=3.2 beta2","c=3.2 beta3")
+summarychain <- data.frame(AcceptanceRate,EffectiveSampleSize,row.names = rown)
+summarychain
+
+
+```
+As we increase c the acceptance rate decreases. With a larger c we have that the jumping distribution can draw samples from a larger range as seen from the density plots above. However, if a very small c is choose there would be substantial auto-correlation in the posterior samples. Hence a moderate value of c (c=2.4/sqrt(p)) is the best choice.
+
+For the case c=2.4/sqrt(p) the jumping efficiency from class is 
+
+```{r}
+p <- dim(X)[2]
+0.3/p
+```
+For our simulation the jumping efficiency was
+```{r}
+mean(effectiveSize(c24)/(4*5000))
+```
+Note that this is the reciprocal of the integrated auto-correlaction. This was used as a measure of efficiency by Gelman et al. [1].
+
+And the acceptance rate from lectures is 0.44 for p=1 and 0.23 for large p. For our simulation we achieved an acceptance rate of
+```{r}
+1 - rejectionRate(c24)[[1]]
+```
+Hence, these match the results from lectures.
+
+
+
+
+[1] Gelman, Andrew, Gareth O. Roberts, and Walter R. Gilks. "Efficient Metropolis jumping rules." Bayesian statistics 5.599-608 (1996): 42.

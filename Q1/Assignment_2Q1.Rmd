@@ -18,7 +18,7 @@ knitr::opts_chunk$set(echo = TRUE)
 **There are places in this assignment where R code will be required. Therefore set the random seed so assignment is reproducible.**
 
 ```{r}
-set.seed(123456)  #Please change random seed to your student id number.
+set.seed(695281)  #Please change random seed to your student id number.
 ```
 
 ## Question One (12 marks)

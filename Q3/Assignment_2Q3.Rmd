@@ -120,7 +120,7 @@ Note that in Stan, defaults for burn-in (warm-up) is one half of all iterations 
 Reporting for PART A:
 
 
-posterior means, standard deviations can be found in the above table. The lower limit of the 95 \% central credible intervals given by the column labeled "2.5\%" while the  upperer limit of the 95 \% central credible intervals given by the column labeled "97.5\%". 
+Posterior means, standard deviations can be found in the above table. The lower limit of the 95 \% central credible intervals given by the column labeled "2.5\%" while the  upperer limit of the 95 \% central credible intervals given by the column labeled "97.5\%". 
 ```{r}
 print(summary(logistic.mm)$summary)
 ```
@@ -222,7 +222,7 @@ Assumsing,
  - $p(\bm u) = \mathcal{N}(\bm 0,\sigma^2_u \bm I)$
  - $p(\tau_u) = Ga(\alpha_u,\gamma_u)$
  
- It can be shown that we have the folling conditional posteriors
+ It can be shown that we have the following conditional posteriors
  
  $$p\left(\tau_{u} | \cdot\right)=\mathrm{Ga}\left(\alpha_{u}+q / 2, \gamma_{u}+\mathbf{u}^{\prime} \mathbf{u} / 2\right)$$
 
@@ -360,7 +360,7 @@ for(i in 1:5){
 ```
 
 ```{r}
-# u
+# sigma2_u
 plot(chain1[,12],type='l',ylab=paste("sigma2_u"),col=1)
 lines(chain1[,12],type='l',col=1)
 lines(chain2[,12],type='l',col=2)
